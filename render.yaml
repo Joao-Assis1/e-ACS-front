@@ -9,6 +9,6 @@ services:
         # Substitua pela URL da sua API no Render (ex: https://e-tet-api.onrender.com)
         value: https://e-tet-api.onrender.com
     routes:
-      - type: rewrite
-        source: /*
+      - source: /*
         destination: /index.html
+        action: rewrite
