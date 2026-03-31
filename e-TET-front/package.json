@@ -10,7 +10,8 @@
     "lint": "run-s lint:*",
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
-    "format": "prettier --write --experimental-cli src/"
+    "format": "prettier --write --experimental-cli src/",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@mdi/font": "^7.4.47",
@@ -23,6 +24,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.58.2",
     "@vitejs/plugin-vue": "^6.0.4",
     "eslint": "^10.0.2",
     "eslint-config-prettier": "^10.1.8",
