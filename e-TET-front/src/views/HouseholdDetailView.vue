@@ -494,7 +494,7 @@ const handleSaveFamily = async () => {
     if (success) familyDialog.value = false
   } else {
     // Modo Offline Cart -> Nova Família salva no rascunho
-    visitCartStore.addDraftFamily(rawPayload)
+    visitCartStore.updateOrAddDraftFamily(rawPayload)
     familyDialog.value = false
   }
 }

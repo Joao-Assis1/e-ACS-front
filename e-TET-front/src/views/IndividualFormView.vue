@@ -671,7 +671,7 @@ const handleRefusal = async () => {
   }
 
   // Salva no "carrinho" localmente (Offline Cart Pattern)
-  visitCartStore.addDraftIndividual(payload)
+  visitCartStore.updateOrAddDraftIndividual(payload)
   handleExit()
 }
 </script>
