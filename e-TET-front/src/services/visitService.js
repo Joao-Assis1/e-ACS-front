@@ -17,5 +17,18 @@ export const visitService = {
   getAll: async () => {
     const response = await api.get('/visits')
     return response.data
-  }
+  },
+
+  /**
+   * GET /visits — Histórico filtrado por domicílio, família ou cidadão.
+   * @param {Object} filters - { householdId?, familyId?, individualId? }
+   */
+  getHistory: async (filters = {}) => {
+    const params = {}
+    if (filters.householdId) params.household_id = filters.householdId
+    if (filters.familyId) params.family_id = filters.familyId
+    if (filters.individualId) params.individual_id = filters.individualId
+    const response = await api.get('/visits', { params })
+    return response.data
+  },
 }
