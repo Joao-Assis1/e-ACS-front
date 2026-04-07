@@ -23,21 +23,21 @@ const router = createRouter({
           name: 'households',
           component: () => import('../views/HouseholdListView.vue'),
         },
-        {
-          path: '/families/:familyId/citizens/new',
-          name: 'citizen-create',
-          component: () => import('../views/IndividualFormView.vue'),
-          props: true,
-          meta: { requiresAuth: true }
-        },
-        {
-          path: '/citizens/:id/edit',
-          name: 'citizen-edit',
-          component: () => import('../views/IndividualFormView.vue'),
-          props: true,
-          meta: { requiresAuth: true }
-        }
       ],
+    },
+    {
+      path: '/families/:familyId/citizens/new',
+      name: 'citizen-create',
+      component: () => import('../views/IndividualFormView.vue'),
+      props: true,
+      meta: { requiresAuth: true, transition: 'slide-left' },
+    },
+    {
+      path: '/citizens/:id/edit',
+      name: 'citizen-edit',
+      component: () => import('../views/IndividualFormView.vue'),
+      props: true,
+      meta: { requiresAuth: true, transition: 'slide-left' },
     },
     {
       path: '/households/new',
