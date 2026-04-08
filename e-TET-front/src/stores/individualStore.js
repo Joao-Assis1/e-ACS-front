@@ -50,8 +50,9 @@ export const useIndividualStore = defineStore('individual', () => {
       console.log('Sanitizado:', sanitized)
       console.log('--- DEBUG: FIM DA CRIAÇÃO ---')
       const created = await individualService.create(sanitized)
-      individuals.value.push(created)
-      return created
+      const processed = processIndividualFromApi(created)
+      individuals.value.push(processed)
+      return processed
     } catch (err) {
       console.error('Erro ao cadastrar indivíduo:', err.response?.data)
       error.value = Array.isArray(err.response?.data?.message) 
@@ -69,9 +70,10 @@ export const useIndividualStore = defineStore('individual', () => {
     try {
       const sanitized = sanitizeIndividualPayload(rawData, { forSync: false })
       const updated = await individualService.update(id, sanitized)
+      const processed = processIndividualFromApi(updated)
       const idx = individuals.value.findIndex((i) => i.id === id)
-      if (idx !== -1) individuals.value[idx] = updated
-      return updated
+      if (idx !== -1) individuals.value[idx] = processed
+      return processed
     } catch (err) {
       error.value = err.response?.data?.message || 'Erro ao atualizar indivíduo.'
       return null

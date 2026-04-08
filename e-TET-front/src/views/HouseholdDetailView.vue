@@ -271,7 +271,7 @@
                         </div>
                         <div
                           class="d-flex flex-wrap ga-1 mt-1"
-                          v-if="ind.healthConditions && ind.healthConditions.length > 0"
+                          v-if="Array.isArray(ind.healthConditions) && ind.healthConditions.length > 0"
                         >
                           <v-chip
                             size="x-small"
@@ -883,10 +883,12 @@ const allFamilies = computed(() => {
  * Garante que indivíduos cadastrados durante a visita fiquem visíveis.
  */
 const getMergedIndividuals = (family) => {
+  if (!family) return []
   const familyId = String(family.id || family._tempId || '').toLowerCase()
   
   // 1. Persistidos que vieram na estrutura da família (se houver)
-  const persistedInFamily = family.individuals || []
+  // Processamos para garantir que healthConditions seja array
+  const persistedInFamily = (family.individuals || []).map(processIndividualFromApi)
   
   // 2. Persistidos que estão no store global (buscados via fetchAll)
   const persistedInStore = (individualStore.individuals || []).filter(i => {
@@ -895,17 +897,19 @@ const getMergedIndividuals = (family) => {
   })
   
   // 3. Rascunhos locais (cadastrados agora e não sincronizados)
-  const drafts = (visitCartStore.draftIndividuals || []).filter(di => {
-    const draftFid = String(di.family_id || (di.family && di.family.id) || '').toLowerCase()
-    return draftFid === familyId
-  })
+  const drafts = (visitCartStore.draftIndividuals || [])
+    .filter(di => {
+      const draftFid = String(di.family_id || (di.family && di.family.id) || '').toLowerCase()
+      return draftFid === familyId
+    })
+    .map(processIndividualFromApi)
 
   // Mesclar tudo priorizando duplicatas por ID
   const merged = [...persistedInFamily]
   
   // Adicionar do store global
   persistedInStore.forEach(i => {
-    if (!merged.find(m => m.id === i.id)) {
+    if (!merged.find(m => (m.id && i.id && m.id === i.id) || (m._tempId && i._tempId && m._tempId === i._tempId))) {
       merged.push(i)
     }
   })
