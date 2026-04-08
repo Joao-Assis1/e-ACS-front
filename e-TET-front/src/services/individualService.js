@@ -9,7 +9,11 @@ export const individualService = {
   async getAllByFamily(familyId) {
     // API retorna todos os indivíduos. Filtramos localmente pelo family_id.
     const response = await api.get('/individuals')
-    return response.data.filter((i) => i.family?.id === familyId || i.family_id === familyId)
+    const fid = String(familyId).toLowerCase()
+    return response.data.filter((i) => {
+      const indFid = String(i.family?.id || i.family_id || i.familyId || '').toLowerCase()
+      return indFid === fid
+    })
   },
 
   async getById(id) {

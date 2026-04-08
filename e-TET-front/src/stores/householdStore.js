@@ -40,7 +40,8 @@ export const useHouseholdStore = defineStore('household', () => {
       households.value.push(created)
       return created
     } catch (err) {
-      error.value = err.response?.data?.message || 'Erro ao cadastrar domicílio.'
+      const msg = err.response?.data?.message
+      error.value = Array.isArray(msg) ? msg.join(', ') : msg || 'Erro ao cadastrar domicílio.'
       return null
     } finally {
       loading.value = false
@@ -57,7 +58,8 @@ export const useHouseholdStore = defineStore('household', () => {
       currentHousehold.value = updated
       return updated
     } catch (err) {
-      error.value = err.response?.data?.message || 'Erro ao atualizar domicílio.'
+      const msg = err.response?.data?.message
+      error.value = Array.isArray(msg) ? msg.join(', ') : msg || 'Erro ao atualizar domicílio.'
       return null
     } finally {
       loading.value = false
