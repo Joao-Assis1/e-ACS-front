@@ -30,12 +30,17 @@ export const processFamiliesFromApi = (families) => {
   
   return families.map(family => {
     if (family.individuals && Array.isArray(family.individuals)) {
-      family.individuals = family.individuals.map(ind => {
-        const _healthObject = ind.healthConditions || {};
-        ind.healthConditions = mapHealthConditionsToArray(_healthObject);
-        ind._healthObject = _healthObject;
-        return ind;
-      });
+      return {
+        ...family,
+        individuals: family.individuals.map(ind => {
+          const _healthObject = ind.healthConditions || {};
+          return {
+            ...ind,
+            healthConditions: mapHealthConditionsToArray(_healthObject),
+            _healthObject: _healthObject
+          };
+        })
+      };
     }
     return family;
   });
@@ -44,9 +49,16 @@ export const processFamiliesFromApi = (families) => {
 export const processIndividualFromApi = (individual) => {
   if (!individual) return individual;
   
+  // Se já foi processado (healthConditions é array), retornamos o próprio objeto
+  // Preservar a referência evita loops de reatividade em computeds.
+  if (Array.isArray(individual.healthConditions)) {
+    return individual;
+  }
+
   const _healthObject = individual.healthConditions || {};
-  individual.healthConditions = mapHealthConditionsToArray(_healthObject);
-  individual._healthObject = _healthObject;
-  
-  return individual;
+  return {
+    ...individual,
+    healthConditions: mapHealthConditionsToArray(_healthObject),
+    _healthObject: _healthObject
+  };
 };

@@ -45,4 +45,14 @@ export const familyService = {
     const response = await api.patch(`/families/${id}/mudou`, { motivo })
     return response.data
   },
+
+  async registerRisk(familyId, data) {
+    const response = await api.post(`/families/${familyId}/risk`, data)
+    return response.data
+  },
+
+  async getRiskHistory(familyId) {
+    const response = await api.get(`/families/${familyId}/risk-history`)
+    return response.data
+  },
 }

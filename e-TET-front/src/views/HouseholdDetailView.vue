@@ -74,6 +74,14 @@
               <v-chip size="small" color="primary" variant="tonal" class="font-weight-medium">
                 {{ household.tipo_imovel }}
               </v-chip>
+              <v-chip size="small" color="orange-darken-3" variant="flat" class="font-weight-bold text-white">
+                <v-icon start size="16">mdi-home-clock</v-icon>
+                {{ totalVisitsCount }} Visitas
+              </v-chip>
+              <v-chip size="small" color="orange-darken-1" variant="flat" class="font-weight-bold text-white">
+                <v-icon start size="16">mdi-heart-pulse</v-icon>
+                {{ healthConditionsCount }} Condições
+              </v-chip>
             </div>
 
             <v-btn
@@ -133,10 +141,10 @@
           >
         </div>
 
-        <div v-if="allFamilies.length > 0" class="d-flex flex-column ga-4">
+        <div v-if="familiesWithIndividuals.length > 0" class="d-flex flex-column ga-4">
           <v-card
-            v-for="family in allFamilies"
-            :key="family.id"
+            v-for="family in familiesWithIndividuals"
+            :key="family.id || family._tempId"
             class="elevation-1 border rounded-lg"
           >
             <!-- Faixa de Risco superior -->
@@ -184,7 +192,7 @@
                       size="small"
                       rounded="lg"
                       class="text-none font-weight-bold px-4"
-                      @click="openVisitDialog('family', family.id, household.id)"
+                      @click="openVisitDialog('family', family.id || family._tempId, household.id)"
                       >VISITAR</v-btn
                     >
 
@@ -220,6 +228,14 @@
                           title="Editar família"
                           @click="openFamilyDialog(family)"
                         />
+                        <v-divider class="my-1" />
+                        <v-list-item
+                          prepend-icon="mdi-shield-check-outline"
+                          title="Estratificar risco"
+                          @click="openRiskDialog(family)"
+                          color="primary"
+                          class="font-weight-bold"
+                        />
                       </v-list>
                     </v-menu>
                   </div>
@@ -248,8 +264,8 @@
                 <v-divider class="my-0" />
 
                 <!-- Cidadãos Vinculados -->
-                <div v-if="getMergedIndividuals(family).length > 0">
-                  <template v-for="(ind, index) in getMergedIndividuals(family)" :key="ind.id || ind._tempId">
+                <div v-if="family.mergedIndividuals.length > 0">
+                  <template v-for="(ind, index) in family.mergedIndividuals" :key="ind.id || ind._tempId">
                     <div class="d-flex align-start justify-space-between py-3">
                       <div>
                         <div
@@ -258,6 +274,7 @@
                           style="color: #1a2332"
                         >
                           {{ ind.nome_completo || 'Não informado' }}
+                          <span v-if="ind.is_responsavel" class="text-primary text-caption ml-1">(Responsável)</span>
                         </div>
                         <div class="text-caption text-medium-emphasis mb-2">
                           {{
@@ -303,7 +320,7 @@
                           size="small"
                           rounded="lg"
                           class="text-none font-weight-bold px-4"
-                          @click="openVisitDialog('individual', ind.id, household.id, family.id)"
+                          @click="openVisitDialog('individual', ind.id || ind._tempId, household.id, family.id || family._tempId)"
                           >VISITAR</v-btn
                         >
 
@@ -342,7 +359,7 @@
                         </v-menu>
                       </div>
                     </div>
-                    <v-divider v-if="index < family.individuals.length - 1" class="my-0" />
+                    <v-divider v-if="index < family.mergedIndividuals.length - 1" class="my-0" />
                   </template>
                 </div>
 
@@ -362,7 +379,7 @@
                   color="#2E7D32"
                   class="text-none font-weight-bold"
                   prepend-icon="mdi-plus"
-                  @click="router.push({ name: 'citizen-create', params: { familyId: family.id } })"
+                  @click="router.push({ name: 'citizen-create', params: { familyId: family.id || family._tempId } })"
                   data-testid="add-citizen"
                 >
                   ADICIONAR CIDADÃO
@@ -601,6 +618,7 @@
                 density="comfortable"
                 placeholder="Ex: 123456"
                 hide-details="auto"
+                data-testid="family-prontuario"
               />
             </div>
             <v-row class="mb-1 mt-0">
@@ -616,6 +634,7 @@
                   variant="outlined"
                   density="comfortable"
                   hide-details="auto"
+                  data-testid="family-membros"
                 />
               </v-col>
               <v-col cols="12" sm="6" class="py-1">
@@ -625,10 +644,13 @@
                 >
                 <v-text-field
                   v-model="familyForm.reside_desde"
-                  type="date"
+                  placeholder="MM/AAAA"
+                  label="Reside desde (Mês/Ano) *"
                   variant="outlined"
                   density="comfortable"
                   hide-details="auto"
+                  :rules="[v => !!v || 'Campo obrigatório', v => /^\d{2}\/\d{4}$/.test(v) || 'Formato inválido (MM/AAAA)']"
+                  data-testid="family-reside-desde"
                 />
               </v-col>
             </v-row>
@@ -790,6 +812,23 @@
         </v-card-actions>
       </v-card>
     </v-dialog>
+
+    <!-- Global Snackbar for Feedback -->
+    <v-snackbar
+      v-model="snackbar.show"
+      :color="snackbar.color"
+      timeout="4000"
+      location="top"
+      rounded="pill"
+    >
+      <div class="d-flex align-center ga-2">
+        <v-icon>{{ snackbar.icon }}</v-icon>
+        <span class="font-weight-medium">{{ snackbar.text }}</span>
+      </div>
+      <template v-slot:actions>
+        <v-btn icon="mdi-close" variant="text" @click="snackbar.show = false" size="small" />
+      </template>
+    </v-snackbar>
   </div>
 </template>
 
@@ -802,8 +841,9 @@ import { useIndividualStore } from '../stores/individualStore'
 import { useVisitStore } from '../stores/visitStore'
 import { useVisitCartStore } from '../stores/visitCartStore'
 import { sanitizeFamilyPayload } from '../utils/sanitizePayload'
-import { calculateFamilyRisk } from '../utils/coelhoSavassi'
 import { processIndividualFromApi } from '../utils/healthConditionMapper'
+import { normalizeId, areIdsEqual } from '../utils/idNormalization'
+import { calculateAgeText, formatToMonthYear } from '../utils/dateUtils'
 
 const route = useRoute()
 const router = useRouter()
@@ -842,6 +882,21 @@ const citizenSaidaDialog = ref(false)
 const citizenSaidaTarget = ref(null)
 const citizenSaidaFamilyId = ref(null)
 const citizenSaidaForm = ref({ motivo_saida: 'mudou' })
+const snackbar = reactive({
+  show: false,
+  text: '',
+  color: 'success',
+  icon: 'mdi-check-circle'
+})
+
+const showMessage = (text, type = 'success') => {
+  snackbar.text = text
+  snackbar.color = type === 'success' ? '#2E7D32' : '#C62828'
+  snackbar.icon = type === 'success' ? 'mdi-check-circle' : 'mdi-alert-circle'
+  snackbar.show = true
+}
+
+// Dialog: Estratificação de Risco (Removido p/ view própria)
 
 const rendaOptions = [
   'Até 1/4 salário mínimo',
@@ -870,7 +925,7 @@ const allFamilies = computed(() => {
   // Merge and avoid duplicates by id or _tempId
   const merged = [...storeFamilies]
   drafts.forEach(df => {
-    if (!merged.find(f => (f.id && f.id === df.id) || (f._tempId && f._tempId === df._tempId))) {
+    if (!merged.find(f => areIdsEqual(f.id || f._tempId, df.id || df._tempId))) {
       merged.push(df)
     }
   })
@@ -879,54 +934,59 @@ const allFamilies = computed(() => {
 })
 
 /**
- * Retorna lista de cidadãos mesclada (Persistidos + Rascunhos) para uma família.
- * Garante que indivíduos cadastrados durante a visita fiquem visíveis.
+ * Computed que mescla famílias e seus respectivos cidadãos.
+ * Evita chamadas repetidas de funções no template e garante reatividade limpa.
  */
-const getMergedIndividuals = (family) => {
-  if (!family) return []
-  const familyId = String(family.id || family._tempId || '').toLowerCase()
-  
-  // 1. Persistidos que vieram na estrutura da família (se houver)
-  // Processamos para garantir que healthConditions seja array
-  const persistedInFamily = (family.individuals || []).map(processIndividualFromApi)
-  
-  // 2. Persistidos que estão no store global (buscados via fetchAll)
-  const persistedInStore = (individualStore.individuals || []).filter(i => {
-    const indFid = String(i.family_id || (i.family && i.family.id) || '').toLowerCase()
-    return indFid === familyId
-  })
-  
-  // 3. Rascunhos locais (cadastrados agora e não sincronizados)
-  const drafts = (visitCartStore.draftIndividuals || [])
-    .filter(di => {
-      const draftFid = String(di.family_id || (di.family && di.family.id) || '').toLowerCase()
-      return draftFid === familyId
+const familiesWithIndividuals = computed(() => {
+  const families = allFamilies.value
+  const storeIndividuals = (individualStore.individuals || []).map(processIndividualFromApi)
+  const draftIndividuals = (visitCartStore.draftIndividuals || []).map(processIndividualFromApi)
+
+  return families.map(family => {
+    const familyId = normalizeId(family.id || family._tempId)
+
+    // 1. Cidadãos que já vem na prop 'individuals' da família
+    const internal = (family.individuals || []).map(processIndividualFromApi)
+
+    // 2. Cidadãos do store global
+    const fromStore = storeIndividuals.filter(i => areIdsEqual(i.family_id || i.family?.id, familyId))
+
+    // 3. Rascunhos
+    const fromDrafts = draftIndividuals.filter(i => areIdsEqual(i.family_id || i.family?.id, familyId))
+
+    // Mesclar sem duplicatas
+    const merged = [...internal]
+    const allOthers = [...fromStore, ...fromDrafts]
+
+    allOthers.forEach(ind => {
+      const isDuplicate = merged.find(m => areIdsEqual(m.id || m._tempId, ind.id || ind._tempId))
+      if (!isDuplicate) merged.push(ind)
     })
-    .map(processIndividualFromApi)
 
-  // Mesclar tudo priorizando duplicatas por ID
-  const merged = [...persistedInFamily]
-  
-  // Adicionar do store global
-  persistedInStore.forEach(i => {
-    if (!merged.find(m => (m.id && i.id && m.id === i.id) || (m._tempId && i._tempId && m._tempId === i._tempId))) {
-      merged.push(i)
+    return {
+      ...family,
+      individuals: family.individuals || [],
+      mergedIndividuals: merged
     }
   })
-  
-  // Adicionar rascunhos
-  drafts.forEach(di => {
-    const isDuplicate = merged.find(i => 
-      (i.id && i.id === di.id) || 
-      (i._tempId && i._tempId === di._tempId)
-    )
-    if (!isDuplicate) {
-      merged.push(processIndividualFromApi({ ...di }))
-    }
-  })
+})
 
-  return merged
-}
+const totalVisitsCount = computed(() => {
+  return visitStore.history.filter(v => areIdsEqual(v.household_id, route.params.id)).length
+})
+
+const healthConditionsCount = computed(() => {
+  let count = 0
+  familiesWithIndividuals.value.forEach(family => {
+    family.mergedIndividuals.forEach(ind => {
+      // healthConditions is an array of strings in this view
+      if (Array.isArray(ind.healthConditions)) {
+        count += ind.healthConditions.length
+      }
+    })
+  })
+  return count
+})
 
 const housingDetails = computed(() => {
   if (!household.value) return {}
@@ -940,32 +1000,43 @@ const housingDetails = computed(() => {
 })
 
 const handleBack = () => {
-  if (window.history.state?.back) router.back()
-  else router.push({ name: 'households' })
+  if (window.history.length > 1 && window.history.state?.back) {
+    router.back()
+  } else {
+    router.push({ name: 'households' })
+  }
 }
-const getFamilyRisk = (family) => calculateFamilyRisk(family, household.value)
+const getFamilyRisk = (family) => {
+  const riskMap = {
+    'R0': { label: 'R0', color: 'blue-grey', icon: 'mdi-shield-check', score: family.pontuacao_risco },
+    'R1': { label: 'R1', color: 'blue', icon: 'mdi-alert-circle-outline', score: family.pontuacao_risco },
+    'R2': { label: 'R2', color: 'orange-darken-2', icon: 'mdi-alert', score: family.pontuacao_risco },
+    'R3': { label: 'R3', color: 'red-darken-2', icon: 'mdi-alert-octagon', score: family.pontuacao_risco }
+  }
+
+  // Se a API já processou o risco, usamos o mapeamento
+  if (family.classificacao_risco) {
+    // Extrai o código (R0, R1, etc) caso o backend envie a string completa do enum
+    const riskCode = family.classificacao_risco.split(' ')[0]
+    if (riskMap[riskCode]) return riskMap[riskCode]
+    if (riskMap[family.classificacao_risco]) return riskMap[family.classificacao_risco]
+  }
+  
+  // Estado padrão para famílias ainda não estratificadas (Membros novos ou offline)
+  return { 
+    label: 'N/E', 
+    color: 'grey-lighten-1', 
+    icon: 'mdi-help-circle-outline', 
+    score: null,
+    description: 'Não Estratificado' 
+  }
+}
 const formatDate = (d) => {
   if (!d) return 'Data desconhecida'
   return new Date(d).toLocaleDateString('pt-BR')
 }
 
-const calculateAgeText = (birthDate) => {
-  if (!birthDate) return null
-  const parts = birthDate.includes('/') ? birthDate.split('/') : birthDate.split('-')
-  const birth =
-    parts.length === 3
-      ? new Date(parts[0].length === 4 ? birthDate : `${parts[2]}-${parts[1]}-${parts[0]}T00:00:00`)
-      : new Date(birthDate)
-  const now = new Date()
-  if (isNaN(birth.getTime())) return null
-  let years = now.getFullYear() - birth.getFullYear()
-  let months = now.getMonth() - birth.getMonth()
-  if (months < 0 || (months === 0 && now.getDate() < birth.getDate())) {
-    years--
-    months += 12
-  }
-  return years > 0 ? `${years} anos e ${months} meses` : `${months} meses`
-}
+// Removed local calculateAgeText as it is now imported
 
 // Visita
 const openVisitDialog = (type, targetId, householdId, familyId = null) => {
@@ -979,6 +1050,8 @@ const handleConfirmVisit = async () => {
   const payload = {
     desfecho: visitForm.value.desfecho,
     turno: visitForm.value.turno,
+    visita_realizada: visitForm.value.desfecho === 'Realizada',
+    acompanhada_por_outro_profissional: false,
     data_visita: new Date().toISOString().substring(0, 10),
     motivo: [],
     motivo_busca_ativa: [],
@@ -995,7 +1068,12 @@ const handleConfirmVisit = async () => {
   }
 
   const result = await visitStore.createVisit(payload)
-  if (result) visitDialog.value = false
+  if (result) {
+    visitDialog.value = false
+    showMessage('Visita registrada com sucesso!')
+  } else {
+    showMessage('Erro ao registrar visita.', 'error')
+  }
 }
 
 // Histórico
@@ -1016,7 +1094,17 @@ const openFamilyMudouDialog = (family) => {
 }
 const handleFamilyMudou = async () => {
   const success = await familyStore.familyMudou(familyMudouTargetId.value, familyMudouForm.value)
-  if (success) familyMudouDialog.value = false
+  if (success) {
+    familyMudouDialog.value = false
+    showMessage('Situação da família atualizada!')
+  } else {
+    showMessage('Erro ao atualizar situação da família.', 'error')
+  }
+}
+
+// Estratificação de Risco
+const openRiskDialog = (family) => {
+  router.push({ name: 'family-risk', params: { familyId: family.id } })
 }
 
 // Excluir Cidadão
@@ -1037,6 +1125,9 @@ const handleDeleteCitizen = async () => {
     }
     deleteCitizenDialog.value = false
     deleteCitizenTarget.value = null
+    showMessage('Cidadão removido com sucesso!')
+  } else {
+    showMessage('Erro ao remover cidadão.', 'error')
   }
 }
 
@@ -1062,6 +1153,9 @@ const handleCitizenSaida = async () => {
     }
     citizenSaidaDialog.value = false
     citizenSaidaTarget.value = null
+    showMessage('Saída do cidadão registrada!')
+  } else {
+    showMessage('Erro ao registrar saída.', 'error')
   }
 }
 
@@ -1073,7 +1167,7 @@ const openFamilyDialog = (family = null) => {
       ...family,
       membros_declarados: family.membros_declarados || family.numero_membros || 1,
       renda_familiar: family.renda_familiar || '',
-      reside_desde: family.reside_desde || '',
+      reside_desde: formatToMonthYear(family.reside_desde || ''),
     }
   } else {
     editingFamilyId.value = null
@@ -1114,9 +1208,9 @@ const handleSaveFamily = async () => {
 
     if (result) {
       familyDialog.value = false
+      showMessage(`Família ${editingFamilyId.value ? 'atualizada' : 'cadastrada'} com sucesso!`)
     } else {
-      // O store já atualiza a ref 'error', mas podemos disparar um alert aqui se desejar
-      alert(familyStore.error || 'Erro ao salvar família.')
+      showMessage(familyStore.error || 'Erro ao salvar família.', 'error')
     }
   } catch (err) {
     console.error('[handleSaveFamily] Exceção:', err)
@@ -1128,7 +1222,12 @@ const confirmDeleteFamily = (family) => {
 }
 const handleDeleteFamily = async () => {
   const success = await familyStore.removeFamily(deleteFamilyId.value)
-  if (success) deleteFamilyId.value = null
+  if (success) {
+    deleteFamilyId.value = null
+    showMessage('Família removida com sucesso!')
+  } else {
+    showMessage('Erro ao remover família.', 'error')
+  }
 }
 const showFamilyInfo = (family) =>
   alert(
@@ -1150,7 +1249,7 @@ onMounted(async () => {
     await familyStore.fetchByHousehold(id)
     console.log('[HouseholdDetailView] Famílias carregadas:', familyStore.families.length)
     
-    await individualStore.fetchAll()
+    await individualStore.fetchByHousehold(id)
     console.log('[HouseholdDetailView] Total de cidadãos no store:', individualStore.individuals.length)
   }
   

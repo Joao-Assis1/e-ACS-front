@@ -42,7 +42,15 @@ export const individualService = {
    * @param {Object} data - { motivo_saida: 'mudou' | 'obito' }
    */
   async registrarSaida(id, data) {
-    const response = await api.patch(`/individuals/${id}/saida`, data)
+    // Backend espera @Body('motivo') motivo: string
+    const response = await api.patch(`/individuals/${id}/saida`, { 
+      motivo: data.motivo_saida || data.motivo 
+    })
+    return response.data
+  },
+
+  async getByHousehold(householdId) {
+    const response = await api.get(`/households/${householdId}/individuals`)
     return response.data
   },
 }

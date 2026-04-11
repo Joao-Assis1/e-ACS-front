@@ -2,7 +2,7 @@ import axios from 'axios'
 import router from '../router'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'https://e-tet-api.onrender.com',
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
   headers: { 'Content-Type': 'application/json' },
 })
 

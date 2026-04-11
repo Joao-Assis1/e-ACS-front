@@ -32,7 +32,7 @@
 
           <v-select
             label="Tipo de Imóvel *"
-            :items="['Domicílio', 'Estabelecimento Comercial', 'Unidade de Saúde', 'Escola']"
+            :items="['Casa', 'Apartamento', 'Cômodo', 'Outro']"
             v-model="formData.tipo_domicilio"
             :rules="[v => !!v || 'Tipo é obrigatório']"
             data-testid="household-tipo"
@@ -40,11 +40,7 @@
 
           <v-row dense>
             <v-col cols="8">
-              <v-select
-                label="Logradouro *"
-                :items="['Rua', 'Avenida', 'Travessa', 'Praça', 'Alameda']"
-                v-model="formData.tipo_logradouro"
-              />
+              <!-- Logradouro mapping handled in sanitizer -->
             </v-col>
             <v-col cols="4">
               <v-text-field
@@ -52,6 +48,7 @@
                 v-model="formData.microarea"
                 placeholder="00"
                 :rules="[v => !!v || 'Obrigatório', v => (v && v.length === 2) || '2 dígitos']"
+                data-testid="household-microarea"
               />
             </v-col>
           </v-row>
@@ -80,6 +77,7 @@
                 v-model="formData.numero"
                 :disabled="formData.is_sn"
                 placeholder="000"
+                data-testid="household-numero"
               />
             </v-col>
           </v-row>
@@ -101,13 +99,6 @@
             v-model="formData.bairro"
             :rules="[v => !!v || 'Bairro é obrigatório']"
             data-testid="household-bairro"
-          />
-          
-          <v-text-field
-            label="Município *"
-            v-model="formData.municipio"
-            placeholder="Digitação Livre"
-            :rules="[v => !!v || 'Município é obrigatório']"
           />
 
           <v-row dense>
@@ -135,14 +126,14 @@
 
           <v-select
             label="Situação de moradia *"
-            :items="['Própria', 'Alugada', 'Cedida', 'Financiada', 'Ocupação']"
+            :items="['Próprio', 'Alugado', 'Arrendado', 'Cedido', 'Ocupação', 'Situação de rua', 'Outra']"
             v-model="formData.situacao_moradia"
             :rules="[v => !!v || 'Campo obrigatório']"
           />
 
           <v-select
             label="Tipo de acesso *"
-            :items="['Pavimento', 'Chão batido', 'Cascalho', 'Outro']"
+            :items="['Pavimentado', 'Chão batido', 'Fluvial', 'Outro']"
             v-model="formData.tipo_acesso"
             :rules="[v => !!v || 'Campo obrigatório']"
           />
@@ -173,28 +164,28 @@
 
           <v-select
             label="Material predominante *"
-            :items="['Alvenaria com revestimento', 'Alvenaria sem revestimento', 'Taipa com revestimento', 'Taipa sem revestimento', 'Madeira', 'Outro']"
+            :items="['Alvenaria/Tijolo com revestimento', 'Alvenaria/Tijolo sem revestimento', 'Taipa com revestimento', 'Taipa sem revestimento', 'Madeira apropriada para construção', 'Material aproveitado (sucata)', 'Palha', 'Outro']"
             v-model="formData.material_construcao"
             :rules="[v => !!v || 'Campo obrigatório']"
           />
 
           <v-select
             label="Abastecimento de água *"
-            :items="['Rede encanada', 'Poço/Nascente', 'Cisterna', 'Carro pipa', 'Outro']"
+            :items="['Rede encanada até o domicílio', 'Poço ou nascente no domicílio', 'Cisterna', 'Carro-pipa', 'Outro']"
             v-model="formData.abastecimento_agua"
             :rules="[v => !!v || 'Campo obrigatório']"
           />
 
           <v-select
             label="Água para consumo *"
-            :items="['Filtrada', 'Fervida', 'Clorada', 'Sem tratamento']"
+            :items="['Filtração', 'Fervura', 'Cloração', 'Mineral', 'Sem tratamento']"
             v-model="formData.agua_consumo"
             :rules="[v => !!v || 'Campo obrigatório']"
           />
 
           <v-select
             label="Escoamento do banheiro *"
-            :items="['Rede coletora de esgoto', 'Fossa séptica', 'Fossa rudimentar', 'Céu aberto', 'Outro']"
+            :items="['Rede coletora de esgoto ou pluvial', 'Fossa séptica', 'Fossa rudimentar', 'Direto para rio, lago ou mar', 'Céu aberto', 'Outro']"
             v-model="formData.escoamento_banheiro"
             :rules="[v => !!v || 'Campo obrigatório']"
           />
@@ -301,20 +292,15 @@ const isEdit = computed(() => !!route.params.id)
 const handleExit = () => {
   confirmExit.value = false
   
-  if (window.history.state?.back) {
+  if (window.history.length > 1 && window.history.state?.back) {
     router.back()
   } else {
-    if (isEdit.value) {
-      router.push({ name: 'household-detail', params: { id: route.params.id } })
-    } else {
-      router.push({ name: 'households' })
-    }
+    router.push({ name: 'households' })
   }
 }
 
 const formData = ref({
-  tipo_domicilio: 'Domicílio',
-  tipo_logradouro: 'Rua',
+  tipo_domicilio: 'Casa',
   microarea: '',
   logradouro: '',
   cep: '',
@@ -323,18 +309,17 @@ const formData = ref({
   complemento: '',
   ponto_referencia: '',
   bairro: '',
-  municipio: '',
   telefone_contato: '',
   telefone_residencial: '',
   localizacao: 'Urbana',
-  situacao_moradia: 'Própria',
-  tipo_acesso: 'Pavimento',
+  situacao_moradia: 'Próprio',
+  tipo_acesso: 'Pavimentado',
   numero_moradores: 1,
   numero_comodos: 1,
-  material_construcao: 'Alvenaria com revestimento',
-  abastecimento_agua: 'Rede encanada',
-  agua_consumo: 'Filtrada',
-  escoamento_banheiro: 'Rede coletora de esgoto',
+  material_construcao: 'Alvenaria/Tijolo com revestimento',
+  abastecimento_agua: 'Rede encanada até o domicílio',
+  agua_consumo: 'Filtração',
+  escoamento_banheiro: 'Rede coletora de esgoto ou pluvial',
   possui_energia: true,
   sem_animais: true,
   animais_quais: []

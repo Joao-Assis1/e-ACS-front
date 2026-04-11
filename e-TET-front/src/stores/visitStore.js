@@ -1,31 +1,40 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { visitService } from '../services/visitService'
+import { persistence } from '../utils/persistence'
+import { generateTempId } from '../utils/uuid'
 
 export const useVisitStore = defineStore('visit', () => {
-  const loading = ref(false)
-  const error = ref(null)
-  
   const history = ref([])
+  const loading = ref(false)
   const historyLoading = ref(false)
+  const error = ref(null)
+
+  const loadFromLocal = () => {
+    const saved = persistence.load('visit')
+    if (saved) {
+      history.value = saved.history || []
+    }
+  }
+
+  const saveToLocal = () => {
+    persistence.save('visit', { history: history.value })
+  }
 
   /**
-   * Registra uma visita domiciliar (FVDT)
+   * Registra uma visita domiciliar (FVDT) de forma local.
    * @param {Object} data - Payload completo da visita
    */
   const createVisit = async (data) => {
-    loading.value = true
-    error.value = null
-    try {
-      const result = await visitService.create(data)
-      return result
-    } catch (err) {
-      console.error('[createVisit] Erro:', err.response?.data || err.message)
-      error.value = err.response?.data?.message || 'Erro ao registrar visita.'
-      return null
-    } finally {
-      loading.value = false
+    const newVisit = {
+      ...data,
+      id: generateTempId(),
+      synced: false,
+      createdAt: new Date().toISOString()
     }
+    history.value.unshift(newVisit) // Adiciona no início do histórico
+    saveToLocal()
+    return newVisit
   }
 
   /**
@@ -36,16 +45,23 @@ export const useVisitStore = defineStore('visit', () => {
     historyLoading.value = true
     error.value = null
     try {
-      const data = await visitService.getHistory(filters)
-      history.value = data
+      const apiHistory = await visitService.getHistory(filters)
+      
+      const unsynced = history.value.filter(v => v.synced === false)
+      history.value = [...apiHistory.map(v => ({ ...v, synced: true })), ...unsynced]
+      saveToLocal()
       return true
     } catch (err) {
-      error.value = err.response?.data?.message || 'Erro ao carregar histórico.'
+      console.warn('Falha ao carregar histórico da API, usando dados locais.', err)
+      loadFromLocal()
       return false
     } finally {
       historyLoading.value = false
     }
   }
+
+  // Inicialização
+  loadFromLocal()
 
   return {
     loading,
@@ -53,6 +69,7 @@ export const useVisitStore = defineStore('visit', () => {
     history,
     historyLoading,
     createVisit,
-    fetchHistory
+    fetchHistory,
+    loadFromLocal
   }
 })

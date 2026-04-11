@@ -3,6 +3,9 @@ import { ref } from 'vue'
 import { individualService } from '../services/individualService'
 import { sanitizeIndividualPayload } from '../utils/sanitizePayload'
 import { processIndividualFromApi } from '../utils/healthConditionMapper'
+import { areIdsEqual } from '../utils/idNormalization'
+import { persistence } from '../utils/persistence'
+import { generateTempId } from '../utils/uuid'
 
 export const useIndividualStore = defineStore('individual', () => {
   const individuals = ref([])
@@ -10,14 +13,30 @@ export const useIndividualStore = defineStore('individual', () => {
   const loading = ref(false)
   const error = ref(null)
 
+  const loadFromLocal = () => {
+    const saved = persistence.load('individual')
+    if (saved) {
+      individuals.value = saved.individuals || []
+    }
+  }
+
+  const saveToLocal = () => {
+    persistence.save('individual', { individuals: individuals.value })
+  }
+
   const fetchAll = async () => {
     loading.value = true
     error.value = null
     try {
       const rawIndividuals = await individualService.getAll()
-      individuals.value = rawIndividuals.map(processIndividualFromApi)
+      const apiIndividuals = rawIndividuals.map(processIndividualFromApi)
+      
+      const unsynced = individuals.value.filter(i => i.synced === false)
+      individuals.value = [...apiIndividuals.map(i => ({ ...i, synced: true })), ...unsynced]
+      saveToLocal()
     } catch (err) {
-      error.value = err.response?.data?.message || 'Erro ao carregar indivíduos.'
+      console.warn('Falha ao buscar indivíduos da API, usando dados locais.', err)
+      loadFromLocal()
     } finally {
       loading.value = false
     }
@@ -28,93 +47,91 @@ export const useIndividualStore = defineStore('individual', () => {
     error.value = null
     try {
       const rawIndividuals = await individualService.getAllByFamily(familyId)
-      individuals.value = rawIndividuals.map(processIndividualFromApi)
+      const apiIndividuals = rawIndividuals.map(processIndividualFromApi)
+      
+      const unsyncedRelated = individuals.value.filter(i => i.synced === false && i.familyId === familyId)
+      const apiSet = new Set(apiIndividuals.map(i => i.id))
+      
+      // Filtrar da lista global e atualizar
+      individuals.value = [
+        ...individuals.value.filter(i => !apiSet.has(i.id) && i.familyId !== familyId),
+        ...apiIndividuals.map(i => ({ ...i, synced: true })),
+        ...unsyncedRelated
+      ]
+      saveToLocal()
     } catch (err) {
-      error.value = err.response?.data?.message || 'Erro ao carregar indivíduos.'
+      console.warn('Falha ao buscar indivíduos por família da API.', err)
+      loadFromLocal()
     } finally {
       loading.value = false
     }
   }
 
-  /**
-   * POST /individuals — Rota CRUD individual.
-   * Sanitiza o payload antes de enviar.
-   */
   const createIndividual = async (rawData) => {
-    loading.value = true
-    error.value = null
-    try {
-      const sanitized = sanitizeIndividualPayload(rawData, { forSync: false })
-      console.log('--- DEBUG: INÍCIO DA CRIAÇÃO (Individual Store) ---')
-      console.log('Original:', rawData)
-      console.log('Sanitizado:', sanitized)
-      console.log('--- DEBUG: FIM DA CRIAÇÃO ---')
-      const created = await individualService.create(sanitized)
-      const processed = processIndividualFromApi(created)
-      individuals.value.push(processed)
-      return processed
-    } catch (err) {
-      console.error('Erro ao cadastrar indivíduo:', err.response?.data)
-      error.value = Array.isArray(err.response?.data?.message) 
-        ? err.response.data.message.join(', ') 
-        : err.response?.data?.message || 'Erro ao cadastrar indivíduo.'
-      return null
-    } finally {
-      loading.value = false
+    // Fluxo local
+    const sanitized = sanitizeIndividualPayload(rawData, { forSync: false })
+    const newIndividual = {
+      ...sanitized,
+      id: generateTempId(),
+      synced: false,
+      createdAt: new Date().toISOString()
     }
+    const processed = processIndividualFromApi(newIndividual)
+    individuals.value.push(processed)
+    saveToLocal()
+    return processed
   }
 
   const updateIndividual = async (id, rawData) => {
-    loading.value = true
-    error.value = null
-    try {
-      const sanitized = sanitizeIndividualPayload(rawData, { forSync: false })
-      const updated = await individualService.update(id, sanitized)
-      const processed = processIndividualFromApi(updated)
-      const idx = individuals.value.findIndex((i) => i.id === id)
-      if (idx !== -1) individuals.value[idx] = processed
-      return processed
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Erro ao atualizar indivíduo.'
-      return null
-    } finally {
-      loading.value = false
+    const sanitized = sanitizeIndividualPayload(rawData, { forSync: false })
+    const idx = individuals.value.findIndex((i) => areIdsEqual(i.id, id))
+    if (idx !== -1) {
+      individuals.value[idx] = { ...individuals.value[idx], ...sanitized, synced: false }
+      saveToLocal()
+      return individuals.value[idx]
     }
+    return null
   }
 
   const removeIndividual = async (id) => {
+    individuals.value = individuals.value.filter((i) => !areIdsEqual(i.id, id))
+    saveToLocal()
+    return true
+  }
+
+  const saidaCidadao = async (id, data) => {
+    // Por enquanto, apenas remove localmente (marcar como saída poderia ser um estado, mas mantendo simples)
+    individuals.value = individuals.value.filter((i) => !areIdsEqual(i.id, id))
+    saveToLocal()
+    return true
+  }
+
+  const fetchByHousehold = async (householdId) => {
     loading.value = true
     error.value = null
     try {
-      await individualService.remove(id)
-      individuals.value = individuals.value.filter((i) => i.id !== id)
-      return true
+      const rawIndividuals = await individualService.getByHousehold(householdId)
+      const processed = rawIndividuals.map(processIndividualFromApi)
+      
+      processed.forEach(ni => {
+        const index = individuals.value.findIndex(i => areIdsEqual(i.id, ni.id))
+        if (index !== -1) {
+          individuals.value[index] = { ...ni, synced: true }
+        } else {
+          individuals.value.push({ ...ni, synced: true })
+        }
+      })
+      saveToLocal()
     } catch (err) {
-      error.value = err.response?.data?.message || 'Erro ao remover indivíduo.'
-      return false
+      console.warn('Falha ao buscar indivíduos por domicílio da API.', err)
+      loadFromLocal()
     } finally {
       loading.value = false
     }
   }
 
-  /**
-   * PATCH /individuals/:id/saida — Registra saída (mudou / óbito).
-   * Remove o cidadão da lista local após confirmação.
-   */
-  const saidaCidadao = async (id, data) => {
-    loading.value = true
-    error.value = null
-    try {
-      await individualService.registrarSaida(id, data)
-      individuals.value = individuals.value.filter((i) => i.id !== id)
-      return true
-    } catch (err) {
-      error.value = err.response?.data?.message || 'Erro ao registrar saída do cidadão.'
-      return false
-    } finally {
-      loading.value = false
-    }
-  }
+  // Inicialização
+  loadFromLocal()
 
   return { 
     individuals, 
@@ -122,10 +139,12 @@ export const useIndividualStore = defineStore('individual', () => {
     loading, 
     error, 
     fetchAll,
-    fetchByFamily, 
+    fetchByFamily,
+    fetchByHousehold,
     createIndividual, 
     updateIndividual, 
     removeIndividual,
-    saidaCidadao
+    saidaCidadao,
+    loadFromLocal
   }
 })

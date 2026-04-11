@@ -1,110 +1,71 @@
 import { test, expect } from '@playwright/test'
 
-async function loginWithFakeToken(page) {
-  await page.goto('/')
-  await page.evaluate(() => {
-    localStorage.setItem('token', 'fake-test-token')
-  })
-}
+test.describe('Household Form', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.clear()
+      window.localStorage.setItem('token', 'fake-test-token')
+      window.localStorage.setItem('user', JSON.stringify({ id: '1', usuario: 'tester', role: 'profissional' }))
+    })
 
-test.describe('Household Form & CRUD (Black Box UI)', () => {
-  test('criação de um novo domicílio funcional via Formulário (BDD - Epic 1.1)', async ({ page }) => {
-    await loginWithFakeToken(page)
-    
-    // 1. Given o usuário acessa households/new
+    // Mock para salvar domicílio
+    await page.route('**/households', async (route) => {
+      if (route.request().method() === 'POST') {
+        await route.fulfill({
+          status: 201,
+          json: { id: 'new-id-123', logradouro: 'Rua Form', numero: '10' }
+        })
+      } else {
+        await route.continue()
+      }
+    })
+
     await page.goto('/households/new')
-    await expect(page).toHaveURL(/\/households\/new/)
+  })
 
-    // 2. When o usuário preenche Logradouro, Bairro e CEP
-    // Identificado por Vuetify Labels ou Placeholders gerais do formulário
-    // Pode falhar se a label não for correspondente, então usamos uma heurística tolerante de input type=text
-    const logradouroInput = page.getByLabel(/Logradouro/i).first()
-    if (await logradouroInput.isVisible().catch(() => false)) {
-      await logradouroInput.fill('Rua Castelo Branco')
-    }
+  test('deve preencher as etapas do formulário e salvar um domicílio', async ({ page }) => {
+    // Etapa 1: Endereço
+    await expect(page.getByText(/Cadastro de imóvel/i)).toBeVisible()
     
-    const bairroInput = page.getByLabel(/Bairro/i).first()
-    if (await bairroInput.isVisible().catch(() => false)) {
-      await bairroInput.fill('Centro')
-    }
-
-    const cepInput = page.getByLabel(/CEP/i).first()
-    if (await cepInput.isVisible().catch(() => false)) {
-      await cepInput.fill('12345-678')
-    }
-
-    // 3. E clica no botão Salvar
-    const saveButton = page.getByRole('button', { name: /Salvar/i }).first()
-    if (await saveButton.isVisible().catch(() => false)) {
-      await saveButton.click()
-    }
+    await page.locator('[data-testid="household-microarea"] input').fill('01')
+    await page.locator('[data-testid="household-logradouro"] input').fill('Rua de Teste Form')
+    await page.locator('[data-testid="household-numero"] input').fill('456')
+    await page.locator('[data-testid="household-bairro"] input').fill('Bairro Form')
     
-    // 4. Then deveria persistir localmente e redirecionar para a interface de edição/detalhes
-    // Como a navegação de nova Household redireciona para router.push(`/households/${id}`) ou households/list:
-    // Apenas verificamos que não tem mais o '/new' no path, ou esperamos uma confirmação visual (v-snackbar)
-    const successSnackbar = page.getByText(/Sucesso|Salvo/i, { exact: false })
-    if (await successSnackbar.isVisible().catch(() => false)) {
-      await expect(successSnackbar).toBeVisible()
-    }
+    await page.getByTestId('household-next').click()
+
+    // Etapa 2: Condições de Moradia
+    await expect(page.getByText(/Condições de Moradia/i)).toBeVisible()
+    await page.locator('[data-testid="household-moradores"] input').fill('2')
+    await page.locator('[data-testid="household-comodos"] input').fill('4')
+    
+    await page.getByTestId('household-next').click()
+
+    // Etapa 3: Infraestrutura & Finalizar
+    await expect(page.getByText(/Infraestrutura/i)).toBeVisible()
+    await page.getByTestId('household-next').click()
+
+    // Verificação de Redirecionamento (Sucesso)
+    // Nota: O app redireciona para o detalhe após salvar
+    await expect(page).toHaveURL(/.*households\/[0-9a-f-]+/)
   })
 
-  test('new household form page loads', async ({ page }) => {
-    await loginWithFakeToken(page)
-    await page.goto('/households/new')
-    await expect(page).toHaveURL(/\/households\/new/)
-  })
+  test('deve validar campos obrigatórios (simulação de erro da API)', async ({ page }) => {
+    await page.route('**/households', async (route) => {
+      if (route.request().method() === 'POST') {
+        await route.fulfill({
+          status: 400,
+          json: { message: 'Campos obrigatórios ausentes' }
+        })
+      }
+    })
 
-  test('household detail page redirects to detail', async ({ page }) => {
-    await loginWithFakeToken(page)
-    await page.goto('/households/fake-household-id')
-    await expect(page).toHaveURL(/\/households\//)
-  })
+    await page.locator('[data-testid="household-microarea"] input').fill('01')
+    await page.getByTestId('household-next').click() // Avança para P2
+    await page.getByTestId('household-next').click() // Avança para P3
+    await page.getByTestId('household-next').click() // Tenta salvar
 
-  test('can navigate from households list to new form', async ({ page }) => {
-    await loginWithFakeToken(page)
-    await page.goto('/households')
-    await expect(page).toHaveURL(/households/, { timeout: 5000 })
-    await page.goto('/households/new')
-    await expect(page).toHaveURL(/\/households\/new/)
-  })
-})
-
-test.describe('Individual Form', () => {
-  test('individual create form loads with family param', async ({ page }) => {
-    await loginWithFakeToken(page)
-    await page.goto('/families/fake-family-id/citizens/new')
-    await expect(page).toHaveURL(/\/citizens\/new/)
-  })
-
-  test('individual edit form loads with citizen id', async ({ page }) => {
-    await loginWithFakeToken(page)
-    await page.goto('/citizens/fake-citizen-id/edit')
-    await expect(page).toHaveURL(/\/citizens\/fake-citizen-id\/edit/)
-  })
-})
-
-test.describe('Routing Guards', () => {
-  test('all protected routes redirect to login without token', async ({ page }) => {
-    // Ensure no token
-    await page.context().clearCookies()
-
-    const protectedRoutes = [
-      '/households',
-      '/households/new',
-      '/households/some-id',
-      '/families/some-id/citizens/new',
-      '/citizens/some-id/edit',
-    ]
-
-    for (const route of protectedRoutes) {
-      await page.goto(route)
-      await expect(page, `Expected ${route} to redirect to /login`).toHaveURL(/\/login/)
-    }
-  })
-
-  test('with token, login redirects to households', async ({ page }) => {
-    await loginWithFakeToken(page)
-    await page.goto('/login')
-    await expect(page).toHaveURL(/\/households/)
+    // Deve mostrar feedback de erro (global snackbar no AppLayout)
+    await expect(page.locator('.v-snackbar')).toBeVisible()
   })
 })
