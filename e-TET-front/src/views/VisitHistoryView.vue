@@ -54,7 +54,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useVisitStore } from '../stores/visitStore'
 import { useSyncStore } from '../stores/syncStore'
 import { formatDate } from '../utils/dateUtils'
@@ -62,8 +62,13 @@ import { formatDate } from '../utils/dateUtils'
 const visitStore = useVisitStore()
 const syncStore = useSyncStore()
 
-// Mock data or actual data from store if implemented
-const visits = ref([])
+const visits = computed(() => {
+  return visitStore.history || []
+})
+
+onMounted(async () => {
+  await visitStore.fetchHistory()
+})
 
 const getTurnoColor = (turno) => {
   const colors = { Manhã: 'info', Tarde: 'warning', Noite: 'indigo' }

@@ -96,6 +96,17 @@
                 <v-icon start size="12">mdi-account-group</v-icon>
                 {{ household.numero_moradores }} morador{{ household.numero_moradores !== 1 ? 'es' : '' }}
               </v-chip>
+              <v-chip
+                v-if="!household.synced"
+                size="x-small"
+                color="orange-darken-2"
+                variant="flat"
+                class="font-weight-bold"
+                label
+              >
+                <v-icon start size="12">mdi-sync-off</v-icon>
+                PENDENTE
+              </v-chip>
               <v-chip size="x-small" variant="tonal" label>
                 {{ household.localizacao }}
               </v-chip>

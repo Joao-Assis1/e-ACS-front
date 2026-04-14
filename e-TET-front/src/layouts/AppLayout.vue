@@ -17,7 +17,7 @@
       <div class="drawer-header pa-5" style="background: linear-gradient(135deg, #05684B, #0C9C6E);">
         <v-icon size="40" color="white" class="mb-2">mdi-account-circle</v-icon>
         <div class="text-subtitle-1 font-weight-bold text-white">{{ authStore.user?.usuario }}</div>
-        <div class="text-caption" style="color: rgba(255,255,255,0.8);">{{ roleLabel }}</div>
+        <div class="text-caption" style="color: rgba(255,255,255,0.8);">Agente de Saúde</div>
       </div>
       <v-divider />
       <v-list nav class="pa-2">
@@ -124,8 +124,6 @@ watch(() => syncStore.error, (val) => {
   if (val) showSnackbar.value = true
 })
 
-const roleLabels = { admin: 'Administrador', gestor: 'Gestor', profissional: 'Profissional' }
-const roleLabel = computed(() => roleLabels[authStore.user?.role] || 'Profissional')
 
 const handleLogout = () => {
   authStore.logout()

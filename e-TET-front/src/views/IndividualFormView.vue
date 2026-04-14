@@ -510,7 +510,7 @@ const visitCartStore = useVisitCartStore()
 const familyStore = useFamilyStore()
 const individualStore = useIndividualStore()
 
-const currentStep = ref(1)
+const currentStep = ref(route.query.step ? parseInt(route.query.step) : 1)
 const confirmExit = ref(false)
 const confirmRefusal = ref(false)
 const formValid = ref(false)

@@ -101,29 +101,43 @@
         </v-card>
 
         <!-- Detalhes Físicos do Domicílio -->
-        <h3 class="text-overline font-weight-bold text-medium-emphasis mb-2 ml-1">
-          CONDIÇÕES DE MORADIA
-        </h3>
-        <v-card class="mb-5 elevation-0 border rounded-lg">
-          <v-list density="compact" class="py-0">
-            <template v-for="(value, key, index) in housingDetails" :key="key">
-              <v-list-item class="px-4 py-3">
-                <div class="d-flex justify-space-between align-center w-100">
-                  <span class="text-body-2 text-medium-emphasis font-weight-medium">{{ key }}</span>
-                  <span
-                    class="text-body-2 font-weight-bold ml-4 text-right"
-                    style="color: #1a2332"
-                    >{{ value || 'Não informado' }}</span
-                  >
-                </div>
-              </v-list-item>
-              <v-divider
-                v-if="index < Object.keys(housingDetails).length - 1"
-                class="my-0 border-b"
-              />
-            </template>
-          </v-list>
-        </v-card>
+        <div class="d-flex justify-space-between align-center mb-2 ml-1">
+          <h3 class="text-overline font-weight-bold text-medium-emphasis mb-0">
+            CONDIÇÕES DE MORADIA
+          </h3>
+          <v-btn
+            variant="text"
+            color="primary"
+            size="small"
+            class="text-none font-weight-bold pr-0"
+            @click="showHousingDetails = !showHousingDetails"
+          >
+            {{ showHousingDetails ? 'ESCONDER' : 'MOSTRAR' }}
+          </v-btn>
+        </div>
+        
+        <v-expand-transition>
+          <v-card v-show="showHousingDetails" class="mb-5 elevation-0 border rounded-lg">
+            <v-list density="compact" class="py-0">
+              <template v-for="(value, key, index) in housingDetails" :key="key">
+                <v-list-item class="px-4 py-3">
+                  <div class="d-flex justify-space-between align-center w-100">
+                    <span class="text-body-2 text-medium-emphasis font-weight-medium">{{ key }}</span>
+                    <span
+                      class="text-body-2 font-weight-bold ml-4 text-right"
+                      style="color: #1a2332"
+                      >{{ value || 'Não informado' }}</span
+                    >
+                  </div>
+                </v-list-item>
+                <v-divider
+                  v-if="index < Object.keys(housingDetails).length - 1"
+                  class="my-0 border-b"
+                />
+              </template>
+            </v-list>
+          </v-card>
+        </v-expand-transition>
 
         <!-- Seção de Famílias -->
         <div class="d-flex justify-space-between align-center mb-3 ml-1 mt-6">
@@ -137,8 +151,15 @@
             class="text-none font-weight-bold"
             prepend-icon="mdi-plus"
             @click="openFamilyDialog()"
-            >ADICIONAR</v-btn
+            :disabled="!household?.synced"
           >
+            ADICIONAR
+            <v-tooltip
+              v-if="!household?.synced"
+              activator="parent"
+              location="top"
+            >Sincronize o domicílio antes de adicionar famílias</v-tooltip>
+          </v-btn>
         </div>
 
         <div v-if="familiesWithIndividuals.length > 0" class="d-flex flex-column ga-4">
@@ -174,7 +195,7 @@
                       style="color: #1a2332"
                     >
                       Família de
-                      {{ family.responsavel?.nome_completo?.split(' ')[0] || 'Sem Responsável' }}
+                      {{ getFamilyResponsavelName(family) || 'Sem Responsável' }}
                       <v-icon
                         size="18"
                         color="grey"
@@ -192,7 +213,7 @@
                       size="small"
                       rounded="lg"
                       class="text-none font-weight-bold px-4"
-                      @click="openVisitDialog('family', family.id || family._tempId, household.id)"
+                      @click="router.push({ name: 'family-visit', params: { familyId: family.id || family._tempId } })"
                       >VISITAR</v-btn
                     >
 
@@ -243,7 +264,7 @@
 
                 <!-- Alerta: Sem responsável -->
                 <v-alert
-                  v-if="!family.responsavel_id"
+                  v-if="!hasFamilyResponsavel(family)"
                   variant="outlined"
                   color="error"
                   class="pa-3 rounded-lg text-body-2 mb-4 bg-red-lighten-5"
@@ -269,7 +290,7 @@
                     <div class="d-flex align-start justify-space-between py-3">
                       <div>
                         <div
-                          @click="router.push({ name: 'citizen-edit', params: { id: ind.id } })"
+                          @click="router.push({ name: 'citizen-detail', params: { id: ind.id || ind._tempId } })"
                           class="text-subtitle-2 font-weight-bold cursor-pointer hover-text-primary"
                           style="color: #1a2332"
                         >
@@ -320,7 +341,7 @@
                           size="small"
                           rounded="lg"
                           class="text-none font-weight-bold px-4"
-                          @click="openVisitDialog('individual', ind.id || ind._tempId, household.id, family.id || family._tempId)"
+                          @click="router.push({ name: 'citizen-visit', params: { citizenId: ind.id || ind._tempId } })"
                           >VISITAR</v-btn
                         >
 
@@ -412,9 +433,15 @@
             class="text-none font-weight-bold"
             rounded="lg"
             @click="openFamilyDialog()"
+            :disabled="!household?.synced"
             data-testid="add-family-empty"
           >
             CADASTRAR FAMÍLIA
+            <v-tooltip
+              v-if="!household?.synced"
+              activator="parent"
+              location="top"
+            >Sincronize o domicílio antes de adicionar famílias</v-tooltip>
           </v-btn>
         </v-card>
       </v-container>
@@ -829,6 +856,13 @@
         <v-btn icon="mdi-close" variant="text" @click="snackbar.show = false" size="small" />
       </template>
     </v-snackbar>
+
+    <!-- Dialog: Estratificação de Risco -->
+    <RiskAssessmentDialog
+      v-model="riskDialog"
+      :family="riskTargetFamily"
+      @save="handleSaveRisk"
+    />
   </div>
 </template>
 
@@ -840,6 +874,7 @@ import { useFamilyStore } from '../stores/familyStore'
 import { useIndividualStore } from '../stores/individualStore'
 import { useVisitStore } from '../stores/visitStore'
 import { useVisitCartStore } from '../stores/visitCartStore'
+import RiskAssessmentDialog from '../components/RiskAssessmentDialog.vue'
 import { sanitizeFamilyPayload } from '../utils/sanitizePayload'
 import { processIndividualFromApi } from '../utils/healthConditionMapper'
 import { normalizeId, areIdsEqual } from '../utils/idNormalization'
@@ -858,6 +893,7 @@ const confirmDeleteDomicilio = ref(false)
 const deleteFamilyId = ref(null)
 const editingFamilyId = ref(null)
 const familyFormRef = ref(null)
+const showHousingDetails = ref(true)
 
 // Dialog: Visita
 const visitDialog = ref(false)
@@ -882,6 +918,10 @@ const citizenSaidaDialog = ref(false)
 const citizenSaidaTarget = ref(null)
 const citizenSaidaFamilyId = ref(null)
 const citizenSaidaForm = ref({ motivo_saida: 'mudou' })
+
+// Dialog: Estratificação de Risco
+const riskDialog = ref(false)
+const riskTargetFamily = ref(null)
 const snackbar = reactive({
   show: false,
   text: '',
@@ -1006,6 +1046,22 @@ const handleBack = () => {
     router.push({ name: 'households' })
   }
 }
+
+const getFamilyResponsavelName = (family) => {
+  const respInd = family.mergedIndividuals?.find(ind => ind.is_responsavel)
+  if (respInd && respInd.nome_completo) {
+    return respInd.nome_completo.split(' ')[0]
+  }
+  if (family.responsavel?.nome_completo) {
+    return family.responsavel.nome_completo.split(' ')[0]
+  }
+  return null
+}
+
+const hasFamilyResponsavel = (family) => {
+  return !!getFamilyResponsavelName(family) || !!family.responsavel_id
+}
+
 const getFamilyRisk = (family) => {
   const riskMap = {
     'R0': { label: 'R0', color: 'blue-grey', icon: 'mdi-shield-check', score: family.pontuacao_risco },
@@ -1068,6 +1124,22 @@ const handleConfirmVisit = async () => {
   if (result) {
     visitDialog.value = false
     showMessage('Visita registrada com sucesso!')
+
+    // T2: Automatizar estratificação se a visita foi REALIZADA
+    if (payload.visita_realizada) {
+      // Se for visita de indivíduo ou família, já temos o alvo
+      if (type === 'individual') {
+        const citizen = individualStore.individuals.find(i => areIdsEqual(i.id, targetId))
+        const family = allFamilies.value.find(f => areIdsEqual(f.id, citizen?.family_id || familyId))
+        if (family) openRiskDialog(family)
+      } else if (type === 'family') {
+        const family = allFamilies.value.find(f => areIdsEqual(f.id, targetId))
+        if (family) openRiskDialog(family)
+      } else if (type === 'household' && allFamilies.value.length > 0) {
+        // Se for domicílio, abre para a primeira família (padrão ACS)
+        openRiskDialog(allFamilies.value[0])
+      }
+    }
   } else {
     showMessage('Erro ao registrar visita.', 'error')
   }
@@ -1101,7 +1173,18 @@ const handleFamilyMudou = async () => {
 
 // Estratificação de Risco
 const openRiskDialog = (family) => {
-  router.push({ name: 'family-risk', params: { familyId: family.id } })
+  riskTargetFamily.value = family
+  riskDialog.value = true
+}
+
+const handleSaveRisk = async (riskData) => {
+  const result = await familyStore.recordRisk(riskTargetFamily.value.id, riskData)
+  if (result) {
+    riskDialog.value = false
+    showMessage(`Estratificação de risco salva com sucesso!`)
+  } else {
+    showMessage(familyStore.error || 'Erro ao salvar estratificação.', 'error')
+  }
 }
 
 // Excluir Cidadão
@@ -1251,6 +1334,20 @@ onMounted(async () => {
   }
   
   visitCartStore.initVisit(route.params.id)
+
+  // T3: Checar se voltamos de uma visita via query parameter para abrir estratificação
+  if (route.query.stratifyFamily) {
+    const familyId = route.query.stratifyFamily
+    // Aguardar carregar famílias
+    setTimeout(() => {
+      const family = allFamilies.value.find(f => areIdsEqual(f.id, familyId))
+      if (family) {
+        openRiskDialog(family)
+        // Limpar query para não abrir de novo no refresh
+        router.replace({ query: {} })
+      }
+    }, 500)
+  }
 })
 </script>
 

@@ -53,7 +53,8 @@ export const useHouseholdStore = defineStore('household', () => {
     loading.value = true
     error.value = null
     try {
-      currentHousehold.value = await householdService.getById(id)
+      const data = await householdService.getById(id)
+      currentHousehold.value = { ...data, synced: true }
       return currentHousehold.value
     } catch (err) {
       error.value = 'Erro ao carregar domicílio.'

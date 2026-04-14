@@ -97,7 +97,10 @@
             <!-- Rooms Count -->
             <v-col cols="12">
               <div class="field-item pa-4 border rounded-lg bg-green-lighten-5 border-primary elevation-1">
-                <div class="text-subtitle-2 font-weight-bold text-primary mb-1 text-uppercase">Cômodos na Residência</div>
+                <div class="d-flex justify-space-between align-center mb-1">
+                  <div class="text-subtitle-2 font-weight-bold text-primary text-uppercase">Cômodos na Residência</div>
+                  <div class="text-h6 font-weight-bold text-primary">{{ form.roomsCount }}</div>
+                </div>
                 <div class="text-caption text-primary-darken-1 mb-4">Número total de cômodos da casa</div>
                 <v-slider
                   v-model="form.roomsCount"

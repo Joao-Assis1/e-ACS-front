@@ -79,6 +79,27 @@ const router = createRouter({
       component: () => import('../views/HouseholdFormView.vue'),
       meta: { requiresAuth: true, transition: 'slide-left' },
     },
+    {
+      path: '/citizens/:id',
+      name: 'citizen-detail',
+      component: () => import('../views/IndividualDetailView.vue'),
+      props: true,
+      meta: { requiresAuth: true, transition: 'slide-left' },
+    },
+    {
+      path: '/families/:familyId/visit',
+      name: 'family-visit',
+      component: () => import('@/views/FamilyVisitView.vue'),
+      props: true,
+      meta: { requiresAuth: true, transition: 'slide-left' },
+    },
+    {
+      path: '/citizens/:citizenId/visit',
+      name: 'citizen-visit',
+      component: () => import('@/views/IndividualVisitView.vue'),
+      props: true,
+      meta: { requiresAuth: true, transition: 'slide-left' },
+    },
   ],
 })
 

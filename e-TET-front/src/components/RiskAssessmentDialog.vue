@@ -50,11 +50,11 @@
               <v-card variant="outlined" class="pa-3 border rounded-lg bg-grey-lighten-5" elevation="0">
                 <div class="d-flex align-center justify-space-between">
                   <div>
-                    <div class="text-caption font-weight-bold text-grey-darken-2 text-uppercase">Saneamento Precário</div>
-                    <div class="text-caption text-medium-emphasis">Ex: Lixo a céu aberto, sem água tratada</div>
+                    <div class="text-caption font-weight-bold text-grey-darken-2 text-uppercase">Saneamento Básico Adequado?</div>
+                    <div class="text-caption text-medium-emphasis">Ex: Água tratada, coleta de lixo, esgoto</div>
                   </div>
                   <v-switch
-                    v-model="form.poorSanitation"
+                    v-model="form.basicSanitation"
                     color="primary"
                     hide-details
                     inset
@@ -66,7 +66,10 @@
             <!-- Rooms Count -->
             <v-col cols="12" class="mt-2">
               <div class="field-item pa-3 border rounded-lg bg-green-lighten-5 border-primary">
-                <div class="text-caption font-weight-bold text-primary mb-1 text-uppercase">Cômodos na Residência</div>
+                <div class="d-flex justify-space-between align-center mb-1">
+                  <div class="text-caption font-weight-bold text-primary text-uppercase">Cômodos na Residência</div>
+                  <div class="text-h6 font-weight-bold text-primary">{{ form.roomsCount }}</div>
+                </div>
                 <v-slider
                   v-model="form.roomsCount"
                   min="1"
@@ -84,13 +87,13 @@
           <!-- Warning: Soma de sentinelas vs membros -->
           <v-alert
             v-if="totalSentinels > familySize"
-            type="warning"
+            type="error"
             variant="tonal"
             class="mt-4 text-caption"
             density="compact"
             border="start"
           >
-            A soma das sentinelas de saúde ({{ totalSentinels }}) é superior ao número de membros da família ({{ familySize }}). Verifique se as contagens estão corretas.
+            A estratificação não pode ser salva: a soma das sentinelas de saúde ({{ totalSentinels }}) não pode ser maior que o número de membros da família ({{ familySize }}).
           </v-alert>
         </v-form>
       </v-card-text>
@@ -106,9 +109,10 @@
           class="text-none font-weight-bold px-8"
           rounded="lg"
           @click="save"
-          :loading="loading"
+          :loading="formLoading || familyStore.loading"
+          :disabled="totalSentinels > familySize"
         >
-          Confirmar Pontuação
+          Salvar
         </v-btn>
       </v-card-actions>
     </v-card>
@@ -117,6 +121,9 @@
 
 <script setup>
 import { ref, reactive, computed, watch } from 'vue'
+import { useFamilyStore } from '../stores/familyStore'
+
+const familyStore = useFamilyStore()
 
 const props = defineProps({
   modelValue: Boolean,
@@ -135,6 +142,7 @@ const internalValue = computed({
 })
 
 const formRef = ref(null)
+const formLoading = ref(false)
 
 const form = reactive({
   bedriddenCount: 0,
@@ -148,12 +156,20 @@ const form = reactive({
   over70YearsCount: 0,
   hypertensionCount: 0,
   diabetesCount: 0,
-  poorSanitation: false,
+  basicSanitation: true,
   roomsCount: 1
 })
 
 const familyName = computed(() => {
-  return props.family?.responsavel?.nome_completo?.split(' ')[0] || 'Família'
+  if (props.family?.responsavel?.nome_completo) {
+    return props.family.responsavel.nome_completo
+  }
+  // Tentar encontrar nos indivíduos se houver
+  if (props.family?.individuals) {
+    const resp = props.family.individuals.find(i => i.is_responsavel)
+    if (resp) return resp.nome_completo
+  }
+  return 'Família de ' + (props.family?.numero_prontuario || 'N/A')
 })
 
 const familySize = computed(() => {
@@ -161,13 +177,13 @@ const familySize = computed(() => {
 })
 
 const totalSentinels = computed(() => {
-  return form.bedriddenCount + 
-         form.physicalDisabilityCount + 
-         form.mentalDisabilityCount + 
-         form.severeMalnutritionCount + 
-         form.drugAddictionCount + 
-         form.hypertensionCount + 
-         form.diabetesCount
+  return (form.bedriddenCount || 0) + 
+         (form.physicalDisabilityCount || 0) + 
+         (form.mentalDisabilityCount || 0) + 
+         (form.severeMalnutritionCount || 0) + 
+         (form.drugAddictionCount || 0) + 
+         (form.hypertensionCount || 0) + 
+         (form.diabetesCount || 0)
 })
 
 const numericFields = [
@@ -191,13 +207,35 @@ const close = () => {
 const save = async () => {
   const { valid } = await formRef.value.validate()
   if (!valid) return
+  
+  // Regra do usuário: Sentinelas não podem exceder número de membros
+  if (totalSentinels.value > familySize.value) {
+    return // O formulário já deve mostrar erro
+  }
 
-  emit('save', { ...form })
+  const payload = {
+    bedriddenCount: Number(form.bedriddenCount),
+    physicalDisabilityCount: Number(form.physicalDisabilityCount),
+    mentalDisabilityCount: Number(form.mentalDisabilityCount),
+    severeMalnutritionCount: Number(form.severeMalnutritionCount),
+    drugAddictionCount: Number(form.drugAddictionCount),
+    unemployedCount: Number(form.unemployedCount),
+    illiterateCount: Number(form.illiterateCount),
+    under6MonthsCount: Number(form.under6MonthsCount),
+    over70YearsCount: Number(form.over70YearsCount),
+    hypertensionCount: Number(form.hypertensionCount),
+    diabetesCount: Number(form.diabetesCount),
+    basicSanitation: !!form.basicSanitation,
+    roomsCount: Number(form.roomsCount)
+  }
+
+  emit('save', payload)
 }
 
-// Reset form when dialog opens
-watch(internalValue, (val) => {
+// Load risk data on open
+watch(internalValue, async (val) => {
   if (val) {
+    // Reset para valores padrão
     Object.assign(form, {
       bedriddenCount: 0,
       physicalDisabilityCount: 0,
@@ -210,9 +248,43 @@ watch(internalValue, (val) => {
       over70YearsCount: 0,
       hypertensionCount: 0,
       diabetesCount: 0,
-      poorSanitation: false,
+      basicSanitation: true,
       roomsCount: 1
     })
+
+    // Tentar carregar histórico
+    if (props.family?.id) {
+      formLoading.value = true
+      try {
+        console.log('[RiskAssessmentDialog] Carregando histórico para:', props.family.id)
+        const history = await familyStore.fetchRiskHistory(props.family.id)
+        if (history && history.length > 0) {
+          const latest = history[0]
+          const details = latest.details || latest
+          console.log('[RiskAssessmentDialog] Dados recuperados:', details)
+          
+          Object.assign(form, {
+            bedriddenCount: Number(details.bedriddenCount || 0),
+            physicalDisabilityCount: Number(details.physicalDisabilityCount || 0),
+            mentalDisabilityCount: Number(details.mentalDisabilityCount || 0),
+            severeMalnutritionCount: Number(details.severeMalnutritionCount || 0),
+            drugAddictionCount: Number(details.drugAddictionCount || 0),
+            unemployedCount: Number(details.unemployedCount || 0),
+            illiterateCount: Number(details.illiterateCount || 0),
+            under6MonthsCount: Number(details.under6MonthsCount || 0),
+            over70YearsCount: Number(details.over70YearsCount || 0),
+            hypertensionCount: Number(details.hypertensionCount || 0),
+            diabetesCount: Number(details.diabetesCount || 0),
+            basicSanitation: details.basicSanitation !== undefined ? !!details.basicSanitation : true,
+            roomsCount: Number(details.roomsCount || 1)
+          })
+        }
+      } catch (err) {
+        console.error('Falha ao carregar o histórico de estratificação', err)
+      } finally {
+        formLoading.value = false
+      }
+    }
   }
 })
 </script>

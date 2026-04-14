@@ -47,15 +47,30 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useFamilyStore } from '../stores/familyStore'
 
 const familyStore = useFamilyStore()
 const search = ref('')
 
 const filteredFamilies = computed(() => {
-  // Logic to get all families from store
-  return []
+  const q = search.value.toLowerCase()
+  return familyStore.families.filter(f => {
+    const nome = (f.responsavel?.nome_completo || f.name || f.numero_prontuario || '').toLowerCase()
+    return nome.includes(q)
+  }).map(f => ({
+    ...f,
+    name: f.responsavel?.nome_completo ? `Família de ${f.responsavel.nome_completo.split(' ')[0]}` : `Prontuário: ${f.numero_prontuario || 'Não definido'}`,
+    responsible: f.responsavel?.nome_completo || 'Sem responsável',
+    risk: f.classificacao_risco || null
+  }))
+})
+
+onMounted(() => {
+  if (familyStore.families.length === 0) {
+    // try loading from local or triggering a fetch if that was the intended workflow
+    familyStore.loadFromLocal()
+  }
 })
 </script>
 

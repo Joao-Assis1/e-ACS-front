@@ -22,7 +22,7 @@
           <v-list-item
             :title="person.nome_completo"
             :subtitle="`CPF: ${person.cpf || '---'} | CNS: ${person.cartao_sus || '---'}`"
-            :to="`/citizens/${person.id}/edit`"
+            :to="`/citizens/${person.id || person._tempId}`"
           >
             <template v-slot:prepend>
               <v-avatar :color="person.sexo === 'Masculino' ? 'blue-lighten-4' : 'pink-lighten-4'" class="mr-3">
@@ -49,15 +49,25 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useIndividualStore } from '../stores/individualStore'
 
 const individualStore = useIndividualStore()
 const search = ref('')
 
 const filteredPeople = computed(() => {
-  // Logic to get all people from store
-  return []
+  const individuals = individualStore.individuals || []
+  if (!search.value) return individuals
+  const q = search.value.toLowerCase()
+  return individuals.filter(p => 
+    p.nome_completo?.toLowerCase().includes(q) || 
+    p.cpf?.includes(q) || 
+    p.cartao_sus?.includes(q)
+  )
+})
+
+onMounted(async () => {
+  await individualStore.fetchAll()
 })
 </script>
 

@@ -362,8 +362,7 @@ export const sanitizeVisitPayload = (payload) => {
     'visita_realizada', 'desfecho', 'acompanhada_por_outro_profissional',
     'motivo', 'motivo_busca_ativa', 'peso', 'altura',
     'imovel_foco', 'acao_educativa', 'tratamento_focal',
-    'inspecao_armadilha', 'registro_mecanico', 'data_visita', 'turno',
-    'cns_profissional'
+    'inspecao_armadilha', 'registro_mecanico', 'data_visita', 'turno'
   ]
 
   const clean = {}
