@@ -28,10 +28,10 @@
               </v-alert>
 
               <v-form @submit.prevent="handleLogin" ref="formRef">
-                <label class="field-label">Usuário</label>
+                <label class="field-label">Usuario (Implementar validação CPF)</label>
                 <v-text-field
                   v-model="username"
-                  placeholder="Digite seu usuário"
+                  placeholder="Digite seu CPF"
                   prepend-inner-icon="mdi-account-outline"
                   :rules="[rules.required]"
                   hide-details="auto"
@@ -112,7 +112,7 @@ const handleLogin = async () => {
 
 <style scoped>
 .login-page {
-  background: linear-gradient(160deg, #E8F5E9 0%, #F0F4F3 40%, #FFFFFF 100%);
+  background: linear-gradient(160deg, #e8f5e9 0%, #f0f4f3 40%, #ffffff 100%);
   min-height: 100vh;
 }
 
@@ -136,7 +136,7 @@ const handleLogin = async () => {
 }
 
 .login-header {
-  background: linear-gradient(135deg, #05684B 0%, #0C9C6E 100%);
+  background: linear-gradient(135deg, #05684b 0%, #0c9c6e 100%);
   padding: 40px 24px 32px;
   text-align: center;
   position: relative;
@@ -195,7 +195,9 @@ const handleLogin = async () => {
 .login-btn {
   letter-spacing: 0.3px;
   font-size: 1rem;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .login-btn:hover {
