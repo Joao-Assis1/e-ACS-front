@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { householdService } from '../services/householdService'
 import { persistence } from '../utils/persistence'
-import { generateTempId } from '../utils/uuid'
+import { generateId } from '../utils/uuid'
 
 export const useHouseholdStore = defineStore('household', () => {
   const households = ref([])
@@ -26,25 +26,59 @@ export const useHouseholdStore = defineStore('household', () => {
     loading.value = true
     error.value = null
     try {
-      // Tenta buscar da API, mas mantém os dados locais não sincronizados
       const apiHouseholds = await householdService.getAll()
       
-      // Mescla: Prioridade para o que está na API, mas preserva o que não foi sincronizado localmente
-      const unsynced = households.value.filter(h => h.synced === false)
-      households.value = [...apiHouseholds.map(h => ({ ...h, synced: true })), ...unsynced]
+      // Deduplicação inteligente: Remove rascunhos que já existem no servidor (pelo endereço)
+      const normalize = (s) => String(s || '').toLowerCase().trim()
+      
+      const unsynced = households.value.filter(h => {
+        if (h.syncStatus === 'SYNCED') return false
+        
+        const alreadyInApi = apiHouseholds.find(ah => 
+          normalize(ah.logradouro) === normalize(h.logradouro) &&
+          normalize(ah.numero) === normalize(h.numero) &&
+          normalize(ah.bairro) === normalize(h.bairro)
+        )
+        return !alreadyInApi
+      })
+
+      households.value = [
+        ...apiHouseholds.map(h => ({ ...h, syncStatus: 'SYNCED' })),
+        ...unsynced
+      ]
       saveToLocal()
     } catch (err) {
       console.warn('Falha ao buscar domicílios da API, usando dados locais.', err)
-      // Se falhar (offline), mantemos o que temos no localStorage
       loadFromLocal()
     } finally {
       loading.value = false
     }
   }
 
+  const pruneOrphanedHouseholds = async () => {
+    loading.value = true
+    try {
+      const allApi = await householdService.getAll()
+      const apiIds = new Set(allApi.map(h => h.id))
+      
+      const before = households.value.length
+      households.value = households.value.filter(h => {
+        if (h.syncStatus !== 'SYNCED') return true
+        return apiIds.has(h.id)
+      })
+      
+      if (households.value.length < before) {
+        saveToLocal()
+      }
+    } catch (err) {
+      console.error('Falha ao podar domicílios órfãos', err)
+    } finally {
+      loading.value = false
+    }
+  }
+
   const fetchById = async (id) => {
-    // Primeiro procura localmente
-    const local = households.value.find(h => h.id === id || h._tempId === id)
+    const local = households.value.find(h => h.id === id)
     if (local) {
       currentHousehold.value = local
       return local
@@ -54,7 +88,7 @@ export const useHouseholdStore = defineStore('household', () => {
     error.value = null
     try {
       const data = await householdService.getById(id)
-      currentHousehold.value = { ...data, synced: true }
+      currentHousehold.value = { ...data, syncStatus: 'SYNCED' }
       return currentHousehold.value
     } catch (err) {
       error.value = 'Erro ao carregar domicílio.'
@@ -65,12 +99,13 @@ export const useHouseholdStore = defineStore('household', () => {
   }
 
   const create = async (data) => {
-    // Fluxo puramente local por padrão
+    const now = new Date().toISOString()
     const newHousehold = {
       ...data,
-      id: generateTempId(), // ID temporário
-      synced: false,
-      createdAt: new Date().toISOString()
+      id: generateId(),
+      syncStatus: 'PENDING',
+      createdAt: now,
+      updatedAt: now
     }
     households.value.push(newHousehold)
     saveToLocal()
@@ -78,11 +113,19 @@ export const useHouseholdStore = defineStore('household', () => {
   }
 
   const update = async (id, data) => {
-    const idx = households.value.findIndex((h) => h.id === id || h._tempId === id)
+    const idx = households.value.findIndex((h) => h.id === id)
     if (idx !== -1) {
-      households.value[idx] = { ...households.value[idx], ...data, synced: false }
+      const current = households.value[idx]
+      const newStatus = current.syncStatus === 'SYNCED' ? 'PENDING' : current.syncStatus
+      
+      households.value[idx] = { 
+        ...current, 
+        ...data, 
+        syncStatus: newStatus,
+        updatedAt: new Date().toISOString()
+      }
       saveToLocal()
-      if (currentHousehold.value && (currentHousehold.value.id === id || currentHousehold.value._tempId === id)) {
+      if (currentHousehold.value && currentHousehold.value.id === id) {
         currentHousehold.value = households.value[idx]
       }
       return households.value[idx]
@@ -91,13 +134,35 @@ export const useHouseholdStore = defineStore('household', () => {
   }
 
   const remove = async (id) => {
-    households.value = households.value.filter((h) => h.id !== id && h._tempId !== id)
-    saveToLocal()
-    return true
+    loading.value = true
+    error.value = null
+    try {
+      await householdService.remove(id)
+      households.value = households.value.filter((h) => h.id !== id)
+      saveToLocal()
+      return true
+    } catch (err) {
+      error.value = err.response?.data?.message || 'Erro ao excluir domicílio.'
+      return false
+    } finally {
+      loading.value = false
+    }
   }
 
-  // Inicialização
   loadFromLocal()
 
-  return { households, currentHousehold, loading, error, fetchAll, fetchById, create, update, remove, loadFromLocal }
+  return {
+    households,
+    currentHousehold,
+    loading,
+    error,
+    fetchAll,
+    fetchById,
+    create,
+    update,
+    remove,
+    pruneOrphanedHouseholds,
+    saveToLocal,
+    loadFromLocal
+  }
 })

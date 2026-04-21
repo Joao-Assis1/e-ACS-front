@@ -5,13 +5,16 @@ import { useHouseholdStore } from './householdStore'
 import { useFamilyStore } from './familyStore'
 import { useIndividualStore } from './individualStore'
 import { useVisitStore } from './visitStore'
+import { useAuthStore } from './authStore'
 import { sanitizeHouseholdPayload, sanitizeFamilyPayload, sanitizeIndividualPayload, sanitizeVisitPayload } from '../utils/sanitizePayload'
+import { processFamiliesFromApi, processIndividualFromApi } from '../utils/healthConditionMapper'
 
 export const useSyncStore = defineStore('sync', () => {
   const householdStore = useHouseholdStore()
   const familyStore = useFamilyStore()
   const individualStore = useIndividualStore()
   const visitStore = useVisitStore()
+  const authStore = useAuthStore()
 
   const syncing = ref(false)
   const lastSyncTime = ref(null)
@@ -19,10 +22,12 @@ export const useSyncStore = defineStore('sync', () => {
   const successMessage = ref(null)
 
   const pendingCount = computed(() => {
-    const households = householdStore.households.filter(h => !h.synced).length
-    const families = familyStore.families.filter(f => !f.synced).length
-    const individuals = individualStore.individuals.filter(i => !i.synced).length
-    const visits = visitStore.history.filter(v => !v.synced).length
+    const isPending = (item) => item.syncStatus === 'PENDING' || (item.syncStatus === undefined && item.synced === false)
+    
+    const households = householdStore.households.filter(isPending).length
+    const families = familyStore.families.filter(isPending).length
+    const individuals = individualStore.individuals.filter(isPending).length
+    const visits = visitStore.history.filter(isPending).length
     return households + families + individuals + visits
   })
 
@@ -40,7 +45,7 @@ export const useSyncStore = defineStore('sync', () => {
     return 'success'
   })
 
-  const performSync = async () => {
+  async function performSync() {
     if (syncing.value || pendingCount.value === 0) return
 
     syncing.value = true
@@ -48,80 +53,77 @@ export const useSyncStore = defineStore('sync', () => {
     successMessage.value = null
 
     try {
-      // 1. Coletar dados não sincronizados
-      const unsyncedHouseholds = householdStore.households.filter(h => !h.synced)
-      const unsyncedFamilies = familyStore.families.filter(f => !f.synced)
-      const unsyncedIndividuals = individualStore.individuals.filter(i => !i.synced)
-      const unsyncedVisits = visitStore.history.filter(v => !v.synced)
+      const isPending = (item) => item.syncStatus === 'PENDING' || (item.syncStatus === undefined && item.synced === false)
 
-      // 2. Montar Payload Batch
+      const unsyncedHouseholds = householdStore.households.filter(isPending)
+      const unsyncedFamilies = familyStore.families.filter(isPending)
+      const unsyncedIndividuals = individualStore.individuals.filter(isPending)
+      const unsyncedVisits = visitStore.history.filter(isPending)
+
+      const acsCpf = authStore.user?.cpf || '00000000000'
+
       const payload = {
-        households: unsyncedHouseholds.map(h => sanitizeHouseholdPayload(h)),
-        families: unsyncedFamilies.map(f => sanitizeFamilyPayload(f)),
-        individuals: unsyncedIndividuals.map(i => sanitizeIndividualPayload(i, { forSync: true })),
-        visits: unsyncedVisits.map(v => sanitizeVisitPayload(v))
+        households: unsyncedHouseholds.map(h => ({ ...sanitizeHouseholdPayload(h), createdBy: acsCpf })),
+        families: unsyncedFamilies.map(f => ({ ...sanitizeFamilyPayload(f), createdBy: acsCpf })),
+        individuals: unsyncedIndividuals.map(i => ({ ...sanitizeIndividualPayload(i, { forSync: true }), createdBy: acsCpf })),
+        visits: unsyncedVisits.map(v => ({ ...sanitizeVisitPayload(v), createdBy: acsCpf }))
       }
 
-      console.log('[SyncStore] Iniciando sync batch:', payload)
-
-      // 3. Chamar API
       const result = await syncService.syncBatch(payload)
-      console.log('[SyncStore] Resultado do sync:', result)
+      console.log('[SyncStore] Resultado do Sync:', result)
 
-      // 4. Atualizar Stores Locais com IDs reais e mark as synced
-      // NOTA: O backend deve retornar um mapeamento de IDs se necessário, 
-      // ou apenas confirmamos o sucesso e atualizamos localmente.
-      // O backend processBatchSync geralmente retorna as entidades criadas/atualizadas.
-
+      let totalSaved = 0
       if (result.households) {
+        totalSaved += result.households.length
         result.households.forEach(rh => {
-          const idx = householdStore.households.findIndex(h => h.id === rh.id || h.id === rh._tempId)
-          if (idx !== -1) householdStore.households[idx] = { ...rh, synced: true }
+          const idx = householdStore.households.findIndex(h => h.id === rh.id)
+          if (idx !== -1) householdStore.households[idx] = { ...rh, syncStatus: 'SYNCED' }
         })
         householdStore.saveToLocal()
       }
 
       if (result.families) {
+        totalSaved += result.families.length
         result.families.forEach(rf => {
-          const idx = familyStore.families.findIndex(f => f.id === rf.id || f.id === rf._tempId)
-          if (idx !== -1) familyStore.families[idx] = { ...rf, synced: true }
+          const idx = familyStore.families.findIndex(f => f.id === rf.id)
+          if (idx !== -1) familyStore.families[idx] = { ...rf, syncStatus: 'SYNCED' }
         })
         familyStore.saveToLocal()
       }
 
       if (result.individuals) {
+        totalSaved += result.individuals.length
         result.individuals.forEach(ri => {
-          const idx = individualStore.individuals.findIndex(i => i.id === ri.id || i.id === ri._tempId)
-          if (idx !== -1) individualStore.individuals[idx] = { ...ri, synced: true }
+          const idx = individualStore.individuals.findIndex(i => i.id === ri.id)
+          if (idx !== -1) individualStore.individuals[idx] = { ...ri, syncStatus: 'SYNCED' }
         })
         individualStore.saveToLocal()
       }
 
-      if (result.visits) {
-        result.visits.forEach(rv => {
-          const idx = visitStore.history.findIndex(v => v.id === rv.id || v.id === rv._tempId)
-          if (idx !== -1) visitStore.history[idx] = { ...rv, synced: true }
-        })
-        visitStore.saveToLocal()
-      }
+      const totalInconsistencies = (result.inconsistencias?.households?.length || 0) + 
+                                  (result.inconsistencias?.families?.length || 0) + 
+                                  (result.inconsistencias?.individuals?.length || 0)
 
       lastSyncTime.value = new Date().toISOString()
-      successMessage.value = `Sincronização concluída: ${unsyncedHouseholds.length} domicílios, ${unsyncedFamilies.length} famílias.`
+      
+      if (totalInconsistencies > 0) {
+        successMessage.value = `Sincronização parcial: ${totalSaved} registros salvos, ${totalInconsistencies} erros reportados.`
+      } else {
+        successMessage.value = `Sincronização concluída: ${totalSaved} novos registros no servidor.`
+      }
       
     } catch (err) {
       console.error('[SyncStore] Erro no sync:', err)
+      if (err.response) {
+        console.error('[SyncStore] Erro Detalhado:', err.response.data)
+      }
       error.value = err.response?.data?.message || 'Erro de conexão ao sincronizar.'
     } finally {
       syncing.value = false
     }
   }
 
-  const areIdsEqual = (idA, idB) => {
-    if (!idA || !idB) return false
-    return idA === idB
-  }
-
-  const pullFromRemote = async () => {
+  async function pullFromRemote() {
     if (syncing.value) return
     
     syncing.value = true
@@ -130,52 +132,55 @@ export const useSyncStore = defineStore('sync', () => {
 
     try {
       const remoteData = await syncService.pull()
-      console.log('[SyncStore] Pull iniciado. Dados remotos:', remoteData)
 
-      // Merge Households
       if (remoteData.households) {
         remoteData.households.forEach(remote => {
-          const idx = householdStore.households.findIndex(local => local.id === remote.id)
+          const normalize = (s) => String(s || '').toLowerCase().trim()
+          const idx = householdStore.households.findIndex(local => 
+            local.id === remote.id || 
+            (normalize(local.logradouro) === normalize(remote.logradouro) && 
+             normalize(local.numero) === normalize(remote.numero) && 
+             normalize(local.bairro) === normalize(remote.bairro))
+          )
+
           if (idx === -1) {
-            householdStore.households.push({ ...remote, synced: true })
+            householdStore.households.push({ ...remote, syncStatus: 'SYNCED' })
           } else {
-            const local = householdStore.households[idx]
-            // Se o remoto for mais recente ou igual, o banco Neon vence
-            if (!local.updatedAt || new Date(remote.updatedAt) >= new Date(local.updatedAt)) {
-              householdStore.households[idx] = { ...remote, synced: true }
-            }
+            householdStore.households[idx] = { ...remote, syncStatus: 'SYNCED' }
           }
         })
         householdStore.saveToLocal()
       }
 
-      // Merge Families
       if (remoteData.families) {
-        remoteData.families.forEach(remote => {
-          const idx = familyStore.families.findIndex(local => local.id === remote.id)
+        const processed = processFamiliesFromApi(remoteData.families)
+        processed.forEach(remote => {
+          const idx = familyStore.families.findIndex(local => 
+            local.id === remote.id || local.numero_prontuario === remote.numero_prontuario
+          )
+
           if (idx === -1) {
-            familyStore.families.push({ ...remote, synced: true })
+            familyStore.families.push({ ...remote, syncStatus: 'SYNCED' })
           } else {
-            const local = familyStore.families[idx]
-            if (!local.updatedAt || new Date(remote.updatedAt) >= new Date(local.updatedAt)) {
-              familyStore.families[idx] = { ...remote, synced: true }
-            }
+            familyStore.families[idx] = { ...remote, syncStatus: 'SYNCED' }
           }
         })
         familyStore.saveToLocal()
       }
 
-      // Merge Individuals
       if (remoteData.individuals) {
-        remoteData.individuals.forEach(remote => {
-          const idx = individualStore.individuals.findIndex(local => local.id === remote.id)
+        remoteData.individuals.forEach(rawRemote => {
+          const remote = processIndividualFromApi(rawRemote)
+          const idx = individualStore.individuals.findIndex(local => 
+            local.id === remote.id || 
+            (remote.cartao_sus && local.cartao_sus === remote.cartao_sus) ||
+            (remote.cpf && local.cpf === remote.cpf)
+          )
+
           if (idx === -1) {
-            individualStore.individuals.push({ ...remote, synced: true })
+            individualStore.individuals.push({ ...remote, syncStatus: 'SYNCED' })
           } else {
-            const local = individualStore.individuals[idx]
-            if (!local.updatedAt || new Date(remote.updatedAt) >= new Date(local.updatedAt)) {
-              individualStore.individuals[idx] = { ...remote, synced: true }
-            }
+            individualStore.individuals[idx] = { ...remote, syncStatus: 'SYNCED' }
           }
         })
         individualStore.saveToLocal()
@@ -190,31 +195,51 @@ export const useSyncStore = defineStore('sync', () => {
       syncing.value = false
     }
   }
-  /**
-   * Sincronização Bidirecional Completa
-   * 1. Envia rascunhos locais (Push)
-   * 2. Baixa atualizações do servidor (Pull)
-   */
-  const performFullSync = async () => {
+
+  async function performFullSync() {
     if (syncing.value) return
     
-    console.log('[SyncStore] Iniciando Sincronização Bidirecional...')
-    
-    // Se houver pendências, enviamos primeiro
+    let pushResult = null
     if (pendingCount.value > 0) {
       await performSync()
-      if (error.value) {
-        console.warn('[SyncStore] Abortando Pull devido a erro no Push.')
-        return
-      }
-    } else {
-      // Se não houver pendências, apenas baixamos os dados
-      await pullFromRemote()
+      if (error.value) return
+      pushResult = successMessage.value
+    }
+    
+    await pullFromRemote()
+    
+    // Se houve push, preserva a mensagem dele ou combina
+    if (pushResult) {
+      successMessage.value = `${pushResult} Base local atualizada.`
+    }
+  }
+
+  async function repairSyncStatus() {
+    console.log('[SyncStore] Iniciando reparo de status de sincronização...')
+    
+    const migrate = (item) => {
+      if (!item || item.syncStatus) return false // Já migrado ou inválido
+      
+      if (item.synced === true) item.syncStatus = 'SYNCED'
+      else if (item.synced === false) item.syncStatus = 'PENDING'
+      else item.syncStatus = 'SYNCED' // Default para segurança
+      
+      delete item.synced
+      return true
     }
 
-    // Se o Push foi bem sucedido, forçamos um Pull para garantir que temos o estado mais fiel do servidor
-    if (successMessage.value && !error.value && !syncing.value) {
-       await pullFromRemote()
+    let changed = false
+    householdStore.households.forEach(h => { if (migrate(h)) changed = true })
+    familyStore.families.forEach(f => { if (migrate(f)) changed = true })
+    individualStore.individuals.forEach(i => { if (migrate(i)) changed = true })
+    visitStore.history.forEach(v => { if (migrate(v)) changed = true })
+
+    if (changed) {
+      console.log('[SyncStore] Reparo concluído. Salvando no LocalStorage.')
+      householdStore.saveToLocal()
+      familyStore.saveToLocal()
+      individualStore.saveToLocal()
+      visitStore.saveToLocal()
     }
   }
 
@@ -229,6 +254,6 @@ export const useSyncStore = defineStore('sync', () => {
     performSync,
     pullFromRemote,
     performFullSync,
-    areIdsEqual
+    repairSyncStatus
   }
 })

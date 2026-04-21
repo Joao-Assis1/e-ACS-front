@@ -5,7 +5,7 @@ import { syncService } from '../services/syncService'
 import { sanitizeFamilyPayload, sanitizeIndividualPayload, sanitizeRiskPayload } from '../utils/sanitizePayload'
 import { processFamiliesFromApi } from '../utils/healthConditionMapper'
 import { persistence } from '../utils/persistence'
-import { generateTempId } from '../utils/uuid'
+import { generateId } from '../utils/uuid'
 import { areIdsEqual } from '../utils/idNormalization'
 
 export const useFamilyStore = defineStore('family', () => {
@@ -33,19 +33,46 @@ export const useFamilyStore = defineStore('family', () => {
     try {
       const rawFamilies = await familyService.getAllByHousehold(householdId)
       const apiFamilies = processFamiliesFromApi(rawFamilies)
-      
-      const unsyncedRelated = families.value.filter(f => f.synced === false && areIdsEqual(f.householdId, householdId))
-      const apiSet = new Set(apiFamilies.map(f => f.id))
+
+      const apiProntuarios = new Set(apiFamilies.map(f => f.numero_prontuario))
+
+      const filteredOld = families.value.filter(f => {
+        if (!areIdsEqual(f.householdId || f.household_id, householdId)) return true
+        if (f.syncStatus === 'SYNCED') return false
+        if (apiProntuarios.has(f.numero_prontuario)) return false
+        return true
+      })
 
       families.value = [
-        ...families.value.filter(f => !apiSet.has(f.id) && !areIdsEqual(f.householdId, householdId)),
-        ...apiFamilies.map(f => ({ ...f, synced: true })),
-        ...unsyncedRelated
+        ...filteredOld,
+        ...apiFamilies.map(f => ({ ...f, syncStatus: 'SYNCED' }))
       ]
       saveToLocal()
     } catch (err) {
       console.warn('Falha ao buscar famílias da API.', err)
       loadFromLocal()
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const pruneOrphanedFamilies = async () => {
+    loading.value = true
+    try {
+      const allApiFamilies = await familyService.getAll()
+      const apiIds = new Set(allApiFamilies.map(f => f.id))
+      
+      const beforeCount = families.value.length
+      families.value = families.value.filter(f => {
+        if (f.syncStatus !== 'SYNCED') return true
+        return apiIds.has(f.id)
+      })
+      
+      if (families.value.length < beforeCount) {
+        saveToLocal()
+      }
+    } catch (err) {
+      console.error('Falha ao executar poda de famílias órfãs', err)
     } finally {
       loading.value = false
     }
@@ -63,11 +90,12 @@ export const useFamilyStore = defineStore('family', () => {
     try {
       const family = await familyService.getById(id)
       const processed = processFamiliesFromApi([family])[0]
-      currentFamily.value = { ...processed, synced: true }
+      const syncedFamily = { ...processed, syncStatus: 'SYNCED' }
+      currentFamily.value = syncedFamily
       
       const idx = families.value.findIndex((f) => areIdsEqual(f.id, id))
-      if (idx !== -1) families.value[idx] = { ...processed, synced: true }
-      else families.value.push({ ...processed, synced: true })
+      if (idx !== -1) families.value[idx] = syncedFamily
+      else families.value.push(syncedFamily)
       
       saveToLocal()
       return currentFamily.value
@@ -80,58 +108,30 @@ export const useFamilyStore = defineStore('family', () => {
   }
 
   const createFamily = async (data) => {
+    const now = new Date().toISOString()
     const newFamily = {
       ...data,
-      id: generateTempId(),
-      synced: false,
-      createdAt: new Date().toISOString()
+      id: generateId(),
+      syncStatus: 'PENDING',
+      createdAt: now,
+      updatedAt: now
     }
     families.value.push(newFamily)
     saveToLocal()
     return newFamily
   }
 
-  const syncFamily = async (familyData, individualsData) => {
-    loading.value = true
-    error.value = null
-    lastSyncResult.value = null
-
-    try {
-      const payload = {
-        family: sanitizeFamilyPayload(familyData),
-        individuals: individualsData.map((ind) =>
-          sanitizeIndividualPayload(ind, { forSync: true }),
-        ),
-      }
-
-      const result = await syncService.syncFamily(payload)
-      lastSyncResult.value = result
-
-      const idx = families.value.findIndex((f) => areIdsEqual(f.id, familyData.id))
-      if (idx !== -1) {
-        families.value[idx] = {
-          ...families.value[idx],
-          id: result.familyId,
-          pontuacao_risco: result.pontuacao_risco,
-          classificacao_risco: result.classificacao_risco,
-          synced: true
-        }
-        saveToLocal()
-      }
-
-      return result
-    } catch (err) {
-      error.value = 'Erro ao sincronizar família.'
-      return null
-    } finally {
-      loading.value = false
-    }
-  }
-
   const updateFamily = async (id, data) => {
     const idx = families.value.findIndex((f) => areIdsEqual(f.id, id))
     if (idx !== -1) {
-      families.value[idx] = { ...families.value[idx], ...data, synced: false }
+      const current = families.value[idx]
+      const newStatus = current.syncStatus === 'SYNCED' ? 'PENDING' : current.syncStatus
+      families.value[idx] = { 
+        ...current, 
+        ...data, 
+        syncStatus: newStatus,
+        updatedAt: new Date().toISOString()
+      }
       saveToLocal()
       return families.value[idx]
     }
@@ -139,15 +139,46 @@ export const useFamilyStore = defineStore('family', () => {
   }
 
   const removeFamily = async (id) => {
-    families.value = families.value.filter((f) => !areIdsEqual(f.id, id))
-    saveToLocal()
-    return true
+    loading.value = true
+    error.value = null
+    try {
+      const family = families.value.find(f => areIdsEqual(f.id, id))
+      if (family && family.syncStatus === 'SYNCED') {
+        await familyService.remove(id)
+      }
+      
+      families.value = families.value.filter((f) => !areIdsEqual(f.id, id))
+      if (currentFamily.value && areIdsEqual(currentFamily.value.id, id)) {
+        currentFamily.value = null
+      }
+      saveToLocal()
+      return true
+    } catch (err) {
+      error.value = 'Erro ao remover família do servidor.'
+      return false
+    } finally {
+      loading.value = false
+    }
   }
 
-  const familyMudou = async (id) => {
-    families.value = families.value.filter((f) => !areIdsEqual(f.id, id))
-    saveToLocal()
-    return true
+  const familyMudou = async (id, data) => {
+    loading.value = true
+    error.value = null
+    try {
+      const family = families.value.find(f => areIdsEqual(f.id, id))
+      if (family && family.syncStatus === 'SYNCED') {
+        await familyService.mudou(id, data.motivo)
+      }
+      
+      families.value = families.value.filter((f) => !areIdsEqual(f.id, id))
+      saveToLocal()
+      return true
+    } catch (err) {
+      error.value = 'Erro ao registrar mudança da família.'
+      return false
+    } finally {
+      loading.value = false
+    }
   }
 
   const recordRisk = async (familyId, riskData) => {
@@ -157,14 +188,13 @@ export const useFamilyStore = defineStore('family', () => {
       const sanitized = sanitizeRiskPayload(riskData)
       const result = await familyService.registerRisk(familyId, sanitized)
       
-      // O backend retorna o registro de risco. Precisamos atualizar a classificação no store.
       const idx = families.value.findIndex((f) => areIdsEqual(f.id, familyId))
       if (idx !== -1) {
         families.value[idx] = { 
           ...families.value[idx], 
           pontuacao_risco: result.finalScore,
           classificacao_risco: result.riskClass,
-          synced: true 
+          syncStatus: 'SYNCED' 
         }
         if (currentFamily.value && areIdsEqual(currentFamily.value.id, familyId)) {
           currentFamily.value = { ...families.value[idx] }
@@ -192,7 +222,6 @@ export const useFamilyStore = defineStore('family', () => {
     }
   }
 
-  // Inicialização
   loadFromLocal()
 
   return {
@@ -205,12 +234,13 @@ export const useFamilyStore = defineStore('family', () => {
     fetchByHousehold,
     fetchById,
     createFamily,
-    syncFamily,
     updateFamily,
     removeFamily,
     familyMudou,
     recordRisk,
     fetchRiskHistory,
+    pruneOrphanedFamilies,
+    saveToLocal,
     loadFromLocal
   }
 })

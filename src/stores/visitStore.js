@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { visitService } from '../services/visitService'
 import { persistence } from '../utils/persistence'
-import { generateTempId } from '../utils/uuid'
+import { generateId } from '../utils/uuid'
 
 export const useVisitStore = defineStore('visit', () => {
   const history = ref([])
@@ -26,11 +26,13 @@ export const useVisitStore = defineStore('visit', () => {
    * @param {Object} data - Payload completo da visita
    */
   const createVisit = async (data) => {
+    const now = new Date().toISOString()
     const newVisit = {
       ...data,
-      id: generateTempId(),
-      synced: false,
-      createdAt: new Date().toISOString()
+      id: generateId(),
+      syncStatus: 'PENDING', // Visitas geralmente não têm estado DRAFT, são finalizadas na hora
+      createdAt: now,
+      updatedAt: now
     }
     history.value.unshift(newVisit) // Adiciona no início do histórico
     saveToLocal()
@@ -47,8 +49,8 @@ export const useVisitStore = defineStore('visit', () => {
     try {
       const apiHistory = await visitService.getHistory(filters)
       
-      const unsynced = history.value.filter(v => v.synced === false)
-      history.value = [...apiHistory.map(v => ({ ...v, synced: true })), ...unsynced]
+      const unsynced = history.value.filter(v => v.syncStatus !== 'SYNCED')
+      history.value = [...apiHistory.map(v => ({ ...v, syncStatus: 'SYNCED' })), ...unsynced]
       saveToLocal()
       return true
     } catch (err) {
@@ -60,7 +62,6 @@ export const useVisitStore = defineStore('visit', () => {
     }
   }
 
-  // Inicialização
   loadFromLocal()
 
   return {
@@ -70,6 +71,7 @@ export const useVisitStore = defineStore('visit', () => {
     historyLoading,
     createVisit,
     fetchHistory,
+    saveToLocal,
     loadFromLocal
   }
 })

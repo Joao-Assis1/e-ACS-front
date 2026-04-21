@@ -5,7 +5,7 @@ import { sanitizeIndividualPayload } from '../utils/sanitizePayload'
 import { processIndividualFromApi } from '../utils/healthConditionMapper'
 import { normalizeId, areIdsEqual } from '../utils/idNormalization'
 import { persistence } from '../utils/persistence'
-import { generateTempId } from '../utils/uuid'
+import { generateId } from '../utils/uuid'
 
 export const useIndividualStore = defineStore('individual', () => {
   const individuals = ref([])
@@ -31,8 +31,8 @@ export const useIndividualStore = defineStore('individual', () => {
       const rawIndividuals = await individualService.getAll()
       const apiIndividuals = rawIndividuals.map(processIndividualFromApi)
       
-      const unsynced = individuals.value.filter(i => i.synced === false)
-      individuals.value = [...apiIndividuals.map(i => ({ ...i, synced: true })), ...unsynced]
+      const unsynced = individuals.value.filter(i => i.syncStatus !== 'SYNCED')
+      individuals.value = [...apiIndividuals.map(i => ({ ...i, syncStatus: 'SYNCED' })), ...unsynced]
       saveToLocal()
     } catch (err) {
       console.warn('Falha ao buscar indivíduos da API, usando dados locais.', err)
@@ -50,19 +50,18 @@ export const useIndividualStore = defineStore('individual', () => {
       const apiIndividuals = rawIndividuals.map(processIndividualFromApi)
       
       const unsyncedRelated = individuals.value.filter(i => 
-        i.synced === false && 
+        i.syncStatus !== 'SYNCED' && 
         areIdsEqual(i.family_id || i.family?.id || i.familyId, familyId)
       )
       const apiSet = new Set(apiIndividuals.map(i => normalizeId(i.id)))
-      const cleanUnsynced = unsyncedRelated.filter(i => !apiSet.has(normalizeId(i.id)) && !apiSet.has(normalizeId(i._tempId)))
+      const cleanUnsynced = unsyncedRelated.filter(i => !apiSet.has(normalizeId(i.id)))
       
-      // Filtrar da lista global e atualizar
       individuals.value = [
         ...individuals.value.filter(i => 
           !apiSet.has(normalizeId(i.id)) && 
           !areIdsEqual(i.family_id || i.family?.id || i.familyId, familyId)
         ),
-        ...apiIndividuals.map(i => ({ ...i, synced: true })),
+        ...apiIndividuals.map(i => ({ ...i, syncStatus: 'SYNCED' })),
         ...cleanUnsynced
       ]
       saveToLocal()
@@ -75,13 +74,14 @@ export const useIndividualStore = defineStore('individual', () => {
   }
 
   const createIndividual = async (rawData) => {
-    // Fluxo local
     const sanitized = sanitizeIndividualPayload(rawData, { forSync: false })
+    const now = new Date().toISOString()
     const newIndividual = {
       ...sanitized,
-      id: generateTempId(),
-      synced: false,
-      createdAt: new Date().toISOString()
+      id: generateId(),
+      syncStatus: 'PENDING',
+      createdAt: now,
+      updatedAt: now
     }
     const processed = processIndividualFromApi(newIndividual)
     individuals.value.push(processed)
@@ -90,10 +90,23 @@ export const useIndividualStore = defineStore('individual', () => {
   }
 
   const updateIndividual = async (id, rawData) => {
-    const sanitized = sanitizeIndividualPayload(rawData, { forSync: false })
     const idx = individuals.value.findIndex((i) => areIdsEqual(i.id, id))
     if (idx !== -1) {
-      individuals.value[idx] = { ...individuals.value[idx], ...sanitized, synced: false }
+      const current = individuals.value[idx]
+      const sanitized = sanitizeIndividualPayload({ ...current, ...rawData }, { forSync: false })
+      const newStatus = current.syncStatus === 'SYNCED' ? 'PENDING' : current.syncStatus
+      
+      const updated = { 
+        ...current,
+        ...sanitized,
+        id: id,
+        syncStatus: newStatus,
+        updatedAt: new Date().toISOString()
+      }
+      
+      // Need to re-process health conditions for UI
+      individuals.value[idx] = processIndividualFromApi(updated)
+      
       saveToLocal()
       return individuals.value[idx]
     }
@@ -107,10 +120,31 @@ export const useIndividualStore = defineStore('individual', () => {
   }
 
   const saidaCidadao = async (id, data) => {
-    // Por enquanto, apenas remove localmente (marcar como saída poderia ser um estado, mas mantendo simples)
     individuals.value = individuals.value.filter((i) => !areIdsEqual(i.id, id))
     saveToLocal()
     return true
+  }
+
+  const pruneOrphanedIndividuals = async () => {
+    loading.value = true
+    try {
+      const allApi = await individualService.getAll()
+      const apiIds = new Set(allApi.map(i => i.id))
+      
+      const before = individuals.value.length
+      individuals.value = individuals.value.filter(i => {
+        if (i.syncStatus !== 'SYNCED') return true
+        return apiIds.has(i.id)
+      })
+      
+      if (individuals.value.length < before) {
+        saveToLocal()
+      }
+    } catch (err) {
+      console.error('Falha ao podar cidadãos órfãos', err)
+    } finally {
+      loading.value = false
+    }
   }
 
   const fetchByHousehold = async (householdId) => {
@@ -120,25 +154,21 @@ export const useIndividualStore = defineStore('individual', () => {
       const rawIndividuals = await individualService.getByHousehold(householdId)
       const apiIndividuals = rawIndividuals.map(processIndividualFromApi)
       
-      // 1. Filtrar rascunhos locais que ainda não foram sincronizados e pertencem a este domicílio
       const unsyncedRelated = individuals.value.filter(i => 
-        i.synced === false && 
+        i.syncStatus !== 'SYNCED' && 
         areIdsEqual(i.household_id || i.family?.household_id || i.householdId, householdId)
       )
 
-      // 2. Filtrar todos os outros indivíduos (de outros domicílios)
       const otherHouseholds = individuals.value.filter(i => 
         !areIdsEqual(i.household_id || i.family?.household_id || i.householdId, householdId)
       )
 
-      // 3. Garantir que se um item faturado no unsyncedRelated já está no apiIndividuals (pelo ID), nós o removemos do unsynced
       const apiSet = new Set(apiIndividuals.map(i => normalizeId(i.id)))
-      const cleanUnsynced = unsyncedRelated.filter(i => !apiSet.has(normalizeId(i.id)) && !apiSet.has(normalizeId(i._tempId)))
+      const cleanUnsynced = unsyncedRelated.filter(i => !apiSet.has(normalizeId(i.id)))
 
-      // 4. Montar a lista final
       individuals.value = [
         ...otherHouseholds,
-        ...apiIndividuals.map(i => ({ ...i, synced: true })),
+        ...apiIndividuals.map(i => ({ ...i, syncStatus: 'SYNCED' })),
         ...cleanUnsynced
       ]
 
@@ -152,9 +182,8 @@ export const useIndividualStore = defineStore('individual', () => {
   }
 
   const fetchById = async (id, options = { force: false }) => {
-    // Primeiro tenta local, a menos que force seja true
     if (!options.force) {
-      const local = individuals.value.find(i => areIdsEqual(i.id, id) || areIdsEqual(i._tempId, id))
+      const local = individuals.value.find(i => areIdsEqual(i.id, id))
       if (local) return local
     }
 
@@ -162,7 +191,7 @@ export const useIndividualStore = defineStore('individual', () => {
     error.value = null
     try {
       const response = await individualService.getById(id)
-      const processed = { ...processIndividualFromApi(response), synced: true }
+      const processed = { ...processIndividualFromApi(response), syncStatus: 'SYNCED' }
       return processed
     } catch (err) {
       console.warn('Cidadão não encontrado na API:', id)
@@ -172,7 +201,6 @@ export const useIndividualStore = defineStore('individual', () => {
     }
   }
 
-  // Inicialização
   loadFromLocal()
 
   return { 
@@ -188,6 +216,8 @@ export const useIndividualStore = defineStore('individual', () => {
     removeIndividual,
     saidaCidadao,
     fetchById,
+    pruneOrphanedIndividuals,
+    saveToLocal,
     loadFromLocal
   }
 })
