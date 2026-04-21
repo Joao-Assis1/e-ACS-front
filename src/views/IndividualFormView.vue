@@ -1,23 +1,6 @@
 <template>
   <div class="individual-form fill-height">
-    <!-- Header Institucional (Figura 3.25) -->
-    <v-toolbar color="primary" flat dark>
-      <v-btn icon @click="confirmExit = true">
-        <v-icon color="white">mdi-arrow-left</v-icon>
-      </v-btn>
-      <v-toolbar-title class="font-weight-bold text-white">Cidadão</v-toolbar-title>
-      <v-spacer />
-      <v-btn
-        variant="text"
-        size="small"
-        rounded="lg"
-        class="mr-2 text-white"
-        border
-        @click="confirmRefusal = true"
-      >
-        <v-icon start>mdi-cancel</v-icon> RECUSOU
-      </v-btn>
-    </v-toolbar>
+    <!-- Header Institucional - REMOVIDO pois o AppLayout já provê o header -->
 
     <!-- Barra de Progresso (Total de 6 etapas conforme Figuras 3.23/3.24) -->
     <v-progress-linear :model-value="(currentStep / 6) * 100" color="secondary" height="4" />
@@ -44,7 +27,8 @@
               v-if="formData.possui_cartao_sus"
               label="Número do Cartão SUS *"
               v-model="formData.cartao_sus"
-              placeholder="000000000000000"
+              v-maska="'### #### #### ####'"
+              placeholder="000 0000 0000 0000"
               hint="Obrigatório se possui cartão SUS"
               persistent-hint
               variant="outlined"
@@ -55,7 +39,8 @@
             <v-text-field
               label="CPF"
               v-model="formData.cpf"
-              placeholder="00000000000"
+              v-maska="'###.###.###-##'"
+              placeholder="000.000.000-00"
               hint="Opcional (somente números)"
               persistent-hint
               variant="outlined"
@@ -94,7 +79,7 @@
                   type="date"
                   hint="Obrigatório"
                   persistent-hint
-                  :rules="[requiredRule]"
+                  :rules="[requiredRule, birthDateRule]"
                   data-testid="citizen-nascimento"
                 />
               </v-col>
@@ -106,6 +91,7 @@
                   hint="Obrigatório"
                   persistent-hint
                   :rules="[requiredRule]"
+                  data-testid="citizen-raca"
                 />
               </v-col>
             </v-row>
@@ -123,7 +109,12 @@
               v-maska="'(##) #####-####'"
               class="mb-4"
             />
-            <v-text-field label="E-mail" v-model="formData.email" class="mb-4" />
+            <v-text-field 
+              label="E-mail" 
+              v-model="formData.email" 
+              class="mb-4" 
+              :rules="[emailRule]"
+            />
             <div class="d-flex align-center ga-2 mb-4">
               <v-text-field
                 label="Nome completo da mãe *"
@@ -260,14 +251,14 @@
                       variant="text"
                       size="small"
                       :color="formData[q.key] === false ? 'success' : 'grey'"
-                      @click="formData[q.key] = false"
+                      @click="handleConditionClick(q.key, false)"
                       >NÃO</v-btn
                     >
                     <v-btn
                       variant="text"
                       size="small"
                       :color="formData[q.key] === true ? 'success' : 'grey'"
-                      @click="formData[q.key] = true"
+                      @click="handleConditionClick(q.key, true)"
                       >SIM</v-btn
                     >
                   </v-card-actions>
@@ -335,14 +326,14 @@
                       variant="text"
                       size="small"
                       :color="formData[q.key] === false ? 'success' : 'grey'"
-                      @click="formData[q.key] = false"
+                      @click="handleConditionClick(q.key, false)"
                       >NÃO</v-btn
                     >
                     <v-btn
                       variant="text"
                       size="small"
                       :color="formData[q.key] === true ? 'success' : 'grey'"
-                      @click="formData[q.key] = true"
+                      @click="handleConditionClick(q.key, true)"
                       >SIM</v-btn
                     >
                   </v-card-actions>
@@ -414,14 +405,14 @@
                       variant="text"
                       size="small"
                       :color="formData[q.key] === false ? 'success' : 'grey'"
-                      @click="formData[q.key] = false"
+                      @click="handleConditionClick(q.key, false)"
                       >NÃO</v-btn
                     >
                     <v-btn
                       variant="text"
                       size="small"
                       :color="formData[q.key] === true ? 'success' : 'grey'"
-                      @click="formData[q.key] = true"
+                      @click="handleConditionClick(q.key, true)"
                       >SIM</v-btn
                     >
                   </v-card-actions>
@@ -524,12 +515,37 @@ const requiredRule = (v) => !!v || 'Campo obrigatório'
 const susRule = (v) => {
   if (!formData.possui_cartao_sus) return true
   const clean = String(v || '').replace(/\D/g, '')
-  return clean.length >= 15 || 'Cartão SUS deve ter 15 dígitos'
+  return clean.length === 15 || 'Cartão SUS deve ter 15 dígitos'
 }
 const cpfRule = (v) => {
   if (!v) return true
   const clean = String(v || '').replace(/\D/g, '')
   return clean.length === 11 || 'CPF deve ter 11 dígitos'
+}
+const emailRule = (v) => {
+  if (!v) return true
+  const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  return re.test(v) || 'E-mail inválido'
+}
+const birthDateRule = (v) => {
+  if (!v) return true
+  const today = new Date().toISOString().split('T')[0]
+  return v <= today || 'Data de nascimento não pode ser no futuro'
+}
+const pregnancyRule = (v) => {
+  if (v === true && formData.sexo === 'Masculino') {
+    return 'Cidadão do sexo masculino não pode ser marcado como gestante'
+  }
+  return true
+}
+
+const handleConditionClick = (key, value) => {
+  if (key === 'gestante' && value === true && formData.sexo === 'Masculino') {
+    errorMessage.value = 'Cidadão do sexo masculino não pode ser marcado como gestante.'
+    showError.value = true
+    return
+  }
+  formData[key] = value
 }
 
 const handleExit = () => {
@@ -583,7 +599,7 @@ const formData = reactive({
 
   // Saúde Stage 5
   peso_inadequado: null,
-  peso_tipo: 'Acima',
+  peso_tipo: 'Normal',
   gestante: null,
   maternidade_referencia: '',
   possui_doenca_respiratoria: null,
@@ -651,16 +667,18 @@ onMounted(async () => {
 
   loading.value = true
   try {
-    const draft = visitCartStore.draftIndividuals.find(
-      (i) => i._tempId === citizenId || i.id === citizenId,
-    )
+    // Tenta buscar pelo Store (que olha local e API)
+    const citizen = await individualStore.fetchById(citizenId)
 
-    if (draft) {
-      Object.assign(formData, populateFormFromApi(draft))
-    } else if (!citizenId.startsWith('draft-')) {
-      const response = await api.get(`/individuals/${citizenId}`)
-      if (response.data) {
-        Object.assign(formData, populateFormFromApi(response.data))
+    if (citizen) {
+      Object.assign(formData, populateFormFromApi(citizen))
+    } else {
+      // Fallback para rascunhos do carrinho se não achar no store principal
+      const draft = visitCartStore.draftIndividuals.find(
+        (i) => i._tempId === citizenId || i.id === citizenId,
+      )
+      if (draft) {
+        Object.assign(formData, populateFormFromApi(draft))
       }
     }
   } catch (error) {
@@ -701,30 +719,45 @@ const handleNext = async () => {
 
     try {
       loading.value = true
+      
+      // Identifica o ID real do cidadão
+      let citizenId = formData.id || formData._tempId || route.params.id
+
+      // Segurança: Verifica se o ID não é um ID de saúde (começa com 'c')
+      if (citizenId && String(citizenId).startsWith('c')) {
+        console.error("ERRO: Tentando editar usando um ID de saúde como se fosse ID de cidadão!", citizenId);
+        // Tenta recuperar o ID correto do objeto formData se o ID do form estiver errado
+        citizenId = formData.individual_id || formData.id || route.params.id;
+        
+        if (String(citizenId).startsWith('c')) {
+             errorMessage.value = "Erro de integridade de dados (ID de saúde detectado como cidadão). Sincronize novamente.";
+             showError.value = true;
+             loading.value = false;
+             return;
+        }
+      }
+
       let result
-      if (formData.id) {
-        result = await individualStore.updateIndividual(formData.id, rawPayload)
+      if (citizenId && !String(citizenId).startsWith('draft-')) {
+        result = await individualStore.updateIndividual(citizenId, rawPayload)
       } else {
         result = await individualStore.createIndividual(rawPayload)
       }
 
       if (result) {
-        // familyStore.addIndividualLocal has been removed as it is redundant and caused errors.
-        // The individualStore and visitCartStore already handle local persistence.
-
         visitCartStore.updateOrAddDraftIndividual({
           ...result,
           family_id: rawPayload.family_id || result.family_id,
         })
-
         handleExit()
       } else {
+        console.error('Erro detalhado do store:', individualStore.error)
         errorMessage.value = individualStore.error || 'Erro ao salvar o cidadão.'
         showError.value = true
       }
     } catch (err) {
-      console.error('Erro no handleNextIndividual:', err)
-      errorMessage.value = 'Houve um erro ao salvar o cidadão.'
+      console.error('Erro detalhado no handleNext:', err)
+      errorMessage.value = err.response?.data?.message || 'Houve um erro ao salvar o cidadão.'
       showError.value = true
     } finally {
       loading.value = false

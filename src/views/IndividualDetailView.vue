@@ -1,16 +1,11 @@
 <template>
   <div class="citizen-detail fill-height bg-grey-lighten-4">
-    <!-- Header -->
-    <v-toolbar color="primary" flat dark>
-      <v-btn icon @click="handleBack">
-        <v-icon color="white">mdi-arrow-left</v-icon>
-      </v-btn>
-      <v-toolbar-title class="text-white font-weight-bold">Informações do cidadão</v-toolbar-title>
-      <v-spacer></v-spacer>
+    <!-- Header - REMOVIDO pois o AppLayout já provê o header -->
+    <Teleport to="#app-bar-actions">
       <v-btn icon @click="loadCitizen(true)" :loading="loading">
         <v-icon color="white">mdi-refresh</v-icon>
       </v-btn>
-    </v-toolbar>
+    </Teleport>
 
     <div v-if="loading" class="d-flex justify-center align-center fill-height">
       <div class="text-center">

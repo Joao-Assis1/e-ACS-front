@@ -1,18 +1,6 @@
 <template>
   <div class="household-form fill-height">
-    <!-- Header Fixo -->
-    <v-toolbar color="primary" flat dark>
-      <v-btn icon @click="confirmExit = true">
-        <v-icon>mdi-close</v-icon>
-      </v-btn>
-      <v-toolbar-title class="font-weight-bold">
-        {{ isEdit ? 'Edição do imóvel' : 'Cadastro de imóvel' }}
-      </v-toolbar-title>
-      <v-spacer />
-      <v-chip variant="outlined" color="white" size="small" class="mr-2">
-        Etapa {{ currentStep }} de 3
-      </v-chip>
-    </v-toolbar>
+    <!-- Header Fixo - REMOVIDO pois o AppLayout já provê o header -->
 
     <!-- Barra de Progresso Sutis -->
     <v-progress-linear
@@ -67,7 +55,8 @@
                 label="CEP *"
                 v-model="formData.cep"
                 v-maska="'#####-###'"
-                placeholder="00000-00"
+                placeholder="00000-000"
+                :rules="[v => !!v || 'CEP é obrigatório', v => (v && v.length === 9) || 'CEP inválido']"
                 data-testid="household-cep"
               />
             </v-col>
@@ -103,10 +92,20 @@
 
           <v-row dense>
             <v-col cols="12" sm="6">
-              <v-text-field label="Telefone Contato" v-model="formData.telefone_contato" v-maska="'(##) #####-####'" />
+              <v-text-field 
+                label="Telefone Contato" 
+                v-model="formData.telefone_contato" 
+                v-maska="'(##) #####-####'" 
+                placeholder="(00) 00000-0000"
+              />
             </v-col>
             <v-col cols="12" sm="6">
-              <v-text-field label="Telefone Residencial" v-model="formData.telefone_residencial" v-maska="'(##) ####-####'" />
+              <v-text-field 
+                label="Telefone Residencial" 
+                v-model="formData.telefone_residencial" 
+                v-maska="'(##) ####-####'" 
+                placeholder="(00) 0000-0000"
+              />
             </v-col>
           </v-row>
         </div>

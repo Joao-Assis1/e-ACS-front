@@ -1,14 +1,6 @@
 <template>
   <div class="family-risk-view pb-10">
-    <v-toolbar color="primary" flat>
-      <v-btn icon @click="handleBack">
-        <v-icon color="white">mdi-arrow-left</v-icon>
-      </v-btn>
-      <v-toolbar-title class="text-white font-weight-bold"
-        >Estratificação de Risco</v-toolbar-title
-      >
-      <v-spacer></v-spacer>
-    </v-toolbar>
+    <!-- Header - REMOVIDO pois o AppLayout já provê o header -->
 
     <v-container class="px-4 pt-4">
       <div v-if="loadingFamily" class="text-center pa-10">

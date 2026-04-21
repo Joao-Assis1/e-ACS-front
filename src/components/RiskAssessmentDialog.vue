@@ -84,16 +84,16 @@
             </v-col>
           </v-row>
 
-          <!-- Warning: Soma de sentinelas vs membros -->
+          <!-- Warning: Sentinela individual vs membros -->
           <v-alert
-            v-if="totalSentinels > familySize"
+            v-if="maxSingleSentinel > familySize"
             type="error"
             variant="tonal"
             class="mt-4 text-caption"
             density="compact"
             border="start"
           >
-            A estratificação não pode ser salva: a soma das sentinelas de saúde ({{ totalSentinels }}) não pode ser maior que o número de membros da família ({{ familySize }}).
+            A estratificação não pode ser salva: nenhuma sentinela individual pode ter um valor maior que o número de cidadãos ativos ({{ familySize }}).
           </v-alert>
         </v-form>
       </v-card-text>
@@ -110,7 +110,7 @@
           rounded="lg"
           @click="save"
           :loading="formLoading || familyStore.loading"
-          :disabled="totalSentinels > familySize"
+          :disabled="maxSingleSentinel > familySize"
         >
           Salvar
         </v-btn>
@@ -173,7 +173,12 @@ const familyName = computed(() => {
 })
 
 const familySize = computed(() => {
-  return props.family?.individuals?.length || (props.family?.membros_declarados || 1)
+  const individualsCount = (props.family?.mergedIndividuals || props.family?.individuals || []).length
+  const declaredCount = props.family?.membros_declarados || 0
+  
+  // Usar o maior valor entre o que está cadastrado e o que foi declarado
+  const size = Math.max(individualsCount, declaredCount)
+  return size > 0 ? size : 1
 })
 
 const totalSentinels = computed(() => {
@@ -184,6 +189,22 @@ const totalSentinels = computed(() => {
          (form.drugAddictionCount || 0) + 
          (form.hypertensionCount || 0) + 
          (form.diabetesCount || 0)
+})
+
+const maxSingleSentinel = computed(() => {
+  return Math.max(
+    form.bedriddenCount || 0,
+    form.physicalDisabilityCount || 0,
+    form.mentalDisabilityCount || 0,
+    form.severeMalnutritionCount || 0,
+    form.drugAddictionCount || 0,
+    form.hypertensionCount || 0,
+    form.diabetesCount || 0,
+    form.unemployedCount || 0,
+    form.illiterateCount || 0,
+    form.under6MonthsCount || 0,
+    form.over70YearsCount || 0
+  )
 })
 
 const numericFields = [
@@ -208,8 +229,8 @@ const save = async () => {
   const { valid } = await formRef.value.validate()
   if (!valid) return
   
-  // Regra do usuário: Sentinelas não podem exceder número de membros
-  if (totalSentinels.value > familySize.value) {
+  // Regra do usuário: Nenhuma sentinela individual pode exceder número de membros
+  if (maxSingleSentinel.value > familySize.value) {
     return // O formulário já deve mostrar erro
   }
 

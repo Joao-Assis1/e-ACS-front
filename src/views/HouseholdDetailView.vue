@@ -1,15 +1,6 @@
 <template>
   <div class="household-detail pb-10">
-    <!-- Header customizado (Toolbar com fundo verde institucional) -->
-    <v-toolbar color="primary" flat>
-      <v-btn icon @click="handleBack">
-        <v-icon color="white">mdi-arrow-left</v-icon>
-      </v-btn>
-      <v-toolbar-title class="text-white font-weight-bold"
-        >Informações do domicílio</v-toolbar-title
-      >
-      <v-spacer></v-spacer>
-    </v-toolbar>
+    <!-- Header customizado (Toolbar com fundo verde institucional) - REMOVIDO pois o AppLayout já provê o header -->
 
     <!-- Loading State -->
     <div v-if="householdStore.loading && !household" class="text-center pa-10">
@@ -151,14 +142,8 @@
             class="text-none font-weight-bold"
             prepend-icon="mdi-plus"
             @click="openFamilyDialog()"
-            :disabled="!household?.synced"
           >
             ADICIONAR
-            <v-tooltip
-              v-if="!household?.synced"
-              activator="parent"
-              location="top"
-            >Sincronize o domicílio antes de adicionar famílias</v-tooltip>
           </v-btn>
         </div>
 
@@ -385,7 +370,7 @@
                 </div>
 
                 <div
-                  v-if="!family.individuals || family.individuals.length === 0"
+                  v-else
                   class="py-4 text-center text-body-2 text-medium-emphasis"
                 >
                   Nenhum cidadão cadastrado nesta família.
@@ -433,15 +418,9 @@
             class="text-none font-weight-bold"
             rounded="lg"
             @click="openFamilyDialog()"
-            :disabled="!household?.synced"
             data-testid="add-family-empty"
           >
             CADASTRAR FAMÍLIA
-            <v-tooltip
-              v-if="!household?.synced"
-              activator="parent"
-              location="top"
-            >Sincronize o domicílio antes de adicionar famílias</v-tooltip>
           </v-btn>
         </v-card>
       </v-container>
@@ -671,6 +650,7 @@
                 >
                 <v-text-field
                   v-model="familyForm.reside_desde"
+                  v-maska="'##/####'"
                   placeholder="MM/AAAA"
                   label="Reside desde (Mês/Ano) *"
                   variant="outlined"
@@ -693,6 +673,7 @@
                 density="comfortable"
                 placeholder="Selecione a faixa de renda"
                 hide-details="auto"
+                data-testid="family-renda"
               />
             </div>
           </v-form>
@@ -712,6 +693,28 @@
           >
             Salvar
           </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
+
+    <!-- Dialog: Confirmação de Exclusão de Família -->
+    <v-dialog v-model="deleteFamilyDialog" max-width="400">
+      <v-card rounded="xl">
+        <v-card-title class="pa-5 font-weight-bold">Excluir Família?</v-card-title>
+        <v-card-text class="px-5 pt-0">
+          Você tem certeza que deseja excluir esta família e todos os cidadãos, visitas e estratificações
+          vinculados? Esta ação não pode ser desfeita.
+        </v-card-text>
+        <v-card-actions class="pa-4">
+          <v-btn variant="text" @click="deleteFamilyDialog = false">Cancelar</v-btn>
+          <v-spacer />
+          <v-btn
+            color="error"
+            variant="flat"
+            :loading="familyStore.loading"
+            @click="handleDeleteFamily"
+            >Excluir</v-btn
+          >
         </v-card-actions>
       </v-card>
     </v-dialog>
@@ -890,6 +893,7 @@ const individualStore = useIndividualStore()
 
 const familyDialog = ref(false)
 const confirmDeleteDomicilio = ref(false)
+const deleteFamilyDialog = ref(false)
 const deleteFamilyId = ref(null)
 const editingFamilyId = ref(null)
 const familyFormRef = ref(null)
@@ -959,13 +963,28 @@ const familyForm = ref({
 const household = computed(() => householdStore.currentHousehold)
 
 const allFamilies = computed(() => {
-  const storeFamilies = familyStore.families || []
-  const drafts = (visitCartStore.draftFamilies || []).filter(df => df.household_id === route.params.id)
+  const currentId = route.params.id
   
-  // Merge and avoid duplicates by id or _tempId
+  // 1. Filtrar do store e já remover duplicatas internas por Prontuário
+  const fromStoreRaw = (familyStore.families || []).filter(f => areIdsEqual(f.household_id || f.householdId, currentId))
+  const storeFamilies = []
+  fromStoreRaw.forEach(f => {
+    if (!storeFamilies.find(exist => exist.numero_prontuario === f.numero_prontuario)) {
+      storeFamilies.push(f)
+    }
+  })
+
+  // 2. Filtrar rascunhos
+  const drafts = (visitCartStore.draftFamilies || []).filter(df => areIdsEqual(df.household_id, currentId))
+  
+  // 3. Mesclar rascunhos garantindo que não existam no store
   const merged = [...storeFamilies]
   drafts.forEach(df => {
-    if (!merged.find(f => areIdsEqual(f.id || f._tempId, df.id || df._tempId))) {
+    const isDuplicate = merged.find(f => 
+      areIdsEqual(f.id || f._tempId, df.id || df._tempId) ||
+      (f.numero_prontuario && f.numero_prontuario === df.numero_prontuario)
+    )
+    if (!isDuplicate) {
       merged.push(df)
     }
   })
@@ -1299,10 +1318,12 @@ const handleSaveFamily = async () => {
 
 const confirmDeleteFamily = (family) => {
   deleteFamilyId.value = family.id
+  deleteFamilyDialog.value = true
 }
 const handleDeleteFamily = async () => {
   const success = await familyStore.removeFamily(deleteFamilyId.value)
   if (success) {
+    deleteFamilyDialog.value = false
     deleteFamilyId.value = null
     showMessage('Família removida com sucesso!')
   } else {

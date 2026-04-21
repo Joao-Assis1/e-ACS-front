@@ -28,12 +28,13 @@
               </v-alert>
 
               <v-form @submit.prevent="handleLogin" ref="formRef">
-                <label class="field-label">Usuario (Implementar validação CPF)</label>
+                <label class="field-label">CPF</label>
                 <v-text-field
                   v-model="username"
-                  placeholder="Digite seu CPF"
-                  prepend-inner-icon="mdi-account-outline"
-                  :rules="[rules.required]"
+                  v-maska="'###.###.###-##'"
+                  placeholder="000.000.000-00"
+                  prepend-inner-icon="mdi-card-account-details-outline"
+                  :rules="[rules.required, rules.cpf]"
                   hide-details="auto"
                   class="mb-5"
                   autofocus
@@ -97,12 +98,14 @@ const showPassword = ref(false)
 
 const rules = {
   required: (v) => !!v || 'Campo obrigatório',
+  cpf: (v) => (v && v.length === 14) || 'CPF deve ter 11 dígitos',
 }
 
 const handleLogin = async () => {
   const { valid } = await formRef.value.validate()
   if (valid) {
-    const success = await authStore.login(username.value, password.value)
+    const cleanCpf = String(username.value).replace(/\D/g, '')
+    const success = await authStore.login(cleanCpf, password.value)
     if (success) {
       router.push({ name: 'households' })
     }

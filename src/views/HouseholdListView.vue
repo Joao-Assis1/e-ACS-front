@@ -4,7 +4,6 @@
     <div class="list-header pa-4 pb-2">
       <div class="d-flex align-center justify-space-between mb-4">
         <div>
-          <h1 class="text-h5 font-weight-bold" style="color: #1A2332;">Domicílios</h1>
           <p class="text-body-2 text-medium-emphasis mt-1">
             {{ households.length }} domicílio{{ households.length !== 1 ? 's' : '' }} cadastrado{{ households.length !== 1 ? 's' : '' }}
           </p>
@@ -96,16 +95,37 @@
                 <v-icon start size="12">mdi-account-group</v-icon>
                 {{ household.numero_moradores }} morador{{ household.numero_moradores !== 1 ? 'es' : '' }}
               </v-chip>
+              <!-- Status de Sincronização (e-SUS Standard) -->
               <v-chip
-                v-if="!household.synced"
+                v-if="household.syncStatus === 'SYNCED'"
+                size="x-small"
+                color="success"
+                variant="tonal"
+                label
+              >
+                <v-icon start size="12">mdi-cloud-check</v-icon>
+                SINCRONIZADO
+              </v-chip>
+              <v-chip
+                v-else-if="household.syncStatus === 'PENDING'"
                 size="x-small"
                 color="orange-darken-2"
                 variant="flat"
                 class="font-weight-bold"
                 label
               >
-                <v-icon start size="12">mdi-sync-off</v-icon>
+                <v-icon start size="12">mdi-cloud-upload</v-icon>
                 PENDENTE
+              </v-chip>
+              <v-chip
+                v-else
+                size="x-small"
+                color="grey"
+                variant="tonal"
+                label
+              >
+                <v-icon start size="12">mdi-cloud-outline</v-icon>
+                RASCUNHO
               </v-chip>
               <v-chip size="x-small" variant="tonal" label>
                 {{ household.localizacao }}
@@ -137,9 +157,15 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHouseholdStore } from '../stores/householdStore'
+import { useFamilyStore } from '../stores/familyStore'
+import { useIndividualStore } from '../stores/individualStore'
+import { useSyncStore } from '../stores/syncStore'
 
 const router = useRouter()
 const householdStore = useHouseholdStore()
+const familyStore = useFamilyStore()
+const individualStore = useIndividualStore()
+const syncStore = useSyncStore()
 const search = ref('')
 
 const households = computed(() => householdStore.households)
@@ -157,8 +183,13 @@ const filteredHouseholds = computed(() => {
 
 const goToDetail = (id) => router.push({ name: 'household-detail', params: { id } })
 
-onMounted(() => {
-  householdStore.fetchAll()
+onMounted(async () => {
+  await householdStore.fetchAll()
+  // Limpar registros fantasmas e reparar status de sincronização
+  await householdStore.pruneOrphanedHouseholds()
+  await familyStore.pruneOrphanedFamilies()
+  await individualStore.pruneOrphanedIndividuals()
+  await syncStore.repairSyncStatus()
 })
 </script>
 

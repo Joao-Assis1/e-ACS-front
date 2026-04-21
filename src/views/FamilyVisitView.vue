@@ -1,16 +1,6 @@
 <template>
   <div class="family-visit-page bg-grey-lighten-4">
-    <!-- Header (Toolbar) -->
-    <v-toolbar color="primary" flat>
-      <v-btn icon @click="handleCancel">
-        <v-icon color="white">mdi-arrow-left</v-icon>
-      </v-btn>
-      <v-toolbar-title class="text-white font-weight-bold">Visita familiar</v-toolbar-title>
-      <v-spacer></v-spacer>
-      <v-btn icon>
-        <v-icon color="white">mdi-map-marker</v-icon>
-      </v-btn>
-    </v-toolbar>
+    <!-- Header - REMOVIDO pois o AppLayout já provê o header -->
 
     <!-- Scrollable Content -->
     <div class="scroll-content pa-4 pb-16">

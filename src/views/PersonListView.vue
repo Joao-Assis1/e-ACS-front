@@ -1,7 +1,6 @@
 <template>
   <v-container>
     <div class="d-flex align-center mb-6">
-      <h1 class="text-h4 font-weight-bold">Pessoas</h1>
       <v-spacer />
       <v-text-field
         v-model="search"
@@ -32,7 +31,35 @@
               </v-avatar>
             </template>
             <template v-slot:append>
-              <v-chip v-if="person.is_responsavel" size="x-small" color="primary" variant="flat">
+              <v-icon
+                v-if="person.syncStatus === 'SYNCED'"
+                color="success"
+                size="small"
+                class="mr-2"
+                title="Sincronizado"
+              >
+                mdi-cloud-check
+              </v-icon>
+              <v-icon
+                v-else-if="person.syncStatus === 'PENDING'"
+                color="orange-darken-2"
+                size="small"
+                class="mr-2"
+                title="Pendente de sincronização"
+              >
+                mdi-cloud-upload
+              </v-icon>
+              <v-icon
+                v-else
+                color="grey"
+                size="small"
+                class="mr-2"
+                title="Rascunho local"
+              >
+                mdi-cloud-outline
+              </v-icon>
+
+              <v-chip v-if="person.is_responsavel" size="x-small" color="primary" variant="flat" class="mr-2">
                 Resp.
               </v-chip>
               <v-btn icon="mdi-chevron-right" variant="text" />

@@ -1,7 +1,6 @@
 <template>
   <v-container>
     <div class="d-flex align-center mb-6">
-      <h1 class="text-h4 font-weight-bold">Famílias</h1>
       <v-spacer />
       <v-text-field
         v-model="search"
@@ -30,7 +29,35 @@
               </v-avatar>
             </template>
             <template v-slot:append>
-              <v-chip size="x-small" variant="flat" color="orange" v-if="family.risk">
+              <v-icon
+                v-if="family.syncStatus === 'SYNCED'"
+                color="success"
+                size="small"
+                class="mr-2"
+                title="Sincronizado"
+              >
+                mdi-cloud-check
+              </v-icon>
+              <v-icon
+                v-else-if="family.syncStatus === 'PENDING'"
+                color="orange-darken-2"
+                size="small"
+                class="mr-2"
+                title="Pendente de sincronização"
+              >
+                mdi-cloud-upload
+              </v-icon>
+              <v-icon
+                v-else
+                color="grey"
+                size="small"
+                class="mr-2"
+                title="Rascunho local"
+              >
+                mdi-cloud-outline
+              </v-icon>
+
+              <v-chip size="x-small" variant="flat" color="orange" v-if="family.risk" class="mr-2">
                 {{ family.risk }}
               </v-chip>
               <v-btn icon="mdi-chevron-right" variant="text" />
