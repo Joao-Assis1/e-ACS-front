@@ -11,7 +11,8 @@ export const sanitizeHouseholdPayload = (payload) => {
     'material_construcao', 'abastecimento_agua', 'agua_consumo', 
     'escoamento_banheiro', 'energia_eletrica', 'possui_animais',
     'quantidade_animais', 'animais_quais', 'numero_moradores', 'numero_comodos',
-    'tipo_acesso_domicilio', 'telefone_residencial', 'telefone_contato'
+    'tipo_acesso_domicilio', 'telefone_residencial', 'telefone_contato',
+    'createdAt', 'updatedAt', 'createdBy'
   ]
 
   const clean = {}
@@ -97,6 +98,8 @@ export const sanitizeHouseholdPayload = (payload) => {
 
   // Tratamentos específicos
   if (clean.cep) clean.cep = String(clean.cep).replace(/\D/g, '')
+  if (clean.telefone_contato) clean.telefone_contato = String(clean.telefone_contato).replace(/\D/g, '')
+  if (clean.telefone_residencial) clean.telefone_residencial = String(clean.telefone_residencial).replace(/\D/g, '')
   if (clean.microarea) clean.microarea = String(clean.microarea).trim().padStart(2, '0')
   if (clean.numero === undefined || clean.numero === '') clean.numero = 'S/N'
   
@@ -111,7 +114,8 @@ export const sanitizeHouseholdPayload = (payload) => {
 export const sanitizeFamilyPayload = (payload) => {
   const allowed = [
     'id', 'numero_prontuario', 'renda_familiar', 'membros_declarados', 
-    'reside_desde', 'saneamento_inadequado', 'household_id'
+    'reside_desde', 'saneamento_inadequado', 'household_id',
+    'createdAt', 'updatedAt', 'createdBy'
   ]
   
   const clean = {}
@@ -138,7 +142,7 @@ export const sanitizeIndividualPayload = (payload, options = {}) => {
   
   // Whitelist de campos permitidos no topo pelo backend (Baseado em CreateIndividualDto)
   const allowedTopLevel = [
-    'id', '_tempId', 'family_id', 'is_responsavel', 'recusa_cadastro',
+    'family_id', 'is_responsavel', 'recusa_cadastro',
     'nome_completo', 'nome_social', 'data_nascimento', 
     'sexo', 'raca_cor', 'nacionalidade', 
     'cartao_sus', 'cpf', 'deficiencias',
@@ -148,7 +152,8 @@ export const sanitizeIndividualPayload = (payload, options = {}) => {
     'email', 'telefone_celular', 'nome_mae', 'nome_pai',
     'nome_mae_desconhecido', 'nome_pai_desconhecido',
     'frequenta_cuidador_tradicional', 'participa_grupo_comunitario',
-    'possui_plano_saude', 'pertence_povo_tradicional', 'usa_outras_praticas'
+    'possui_plano_saude', 'pertence_povo_tradicional', 'usa_outras_praticas',
+    'createdAt', 'updatedAt', 'createdBy', 'id'
   ]
 
   const clean = {}
@@ -216,6 +221,19 @@ export const sanitizeIndividualPayload = (payload, options = {}) => {
     }
 
     if (val !== undefined) {
+      // Limpeza de caracteres de máscara para campos específicos
+      if (['cpf', 'cartao_sus', 'telefone_celular'].includes(key)) {
+        val = String(val).replace(/\D/g, '')
+      }
+      // Garantir booleano para campos que o banco não aceita null
+      if ([
+        'possui_deficiencia', 'frequenta_escola', 'plano_saude', 
+        'comunidade_tradicional', 'nome_mae_desconhecido', 'nome_pai_desconhecido',
+        'frequenta_cuidador_tradicional', 'participa_grupo_comunitario',
+        'possui_plano_saude', 'pertence_povo_tradicional', 'usa_outras_praticas'
+      ].includes(key)) {
+        val = !!val
+      }
       clean[key] = val
     }
   })
@@ -278,7 +296,11 @@ export const sanitizeIndividualPayload = (payload, options = {}) => {
 export const populateFormFromApi = (individual) => {
   if (!individual) return {}
 
-  const health = individual.healthConditions || {}
+  // O Store processa healthConditions para array. O objeto original fica em _healthObject.
+  const health = individual._healthObject || 
+                 (typeof individual.healthConditions === 'object' && !Array.isArray(individual.healthConditions) 
+                   ? individual.healthConditions 
+                   : {})
   
   // Mapeamento extra para nomes usados na UI
   const uiMapping = {
@@ -296,8 +318,8 @@ export const populateFormFromApi = (individual) => {
     esta_domiciliado: health.acamado_domiciliado,
     acamado: health.acamado_domiciliado, 
     domiciliado: health.acamado_domiciliado,
-    peso_inadequado: !!health.acima_do_peso,
-    peso_tipo: health.acima_do_peso ? 'Acima' : 'Normal',
+    peso_inadequado: !!health.acima_do_peso || !!health.abaixo_do_peso,
+    peso_tipo: health.abaixo_do_peso ? 'Abaixo' : (health.acima_do_peso ? 'Acima' : 'Normal'),
     
     // Campos Sociodemográficos / Identificação
     grau_instrucao: individual.escolaridade,
@@ -317,6 +339,7 @@ export const populateFormFromApi = (individual) => {
 
   return {
     ...individual,
+    id: individual.id,
     ...health,
     ...uiMapping
   }
@@ -362,7 +385,8 @@ export const sanitizeVisitPayload = (payload) => {
     'visita_realizada', 'desfecho', 'acompanhada_por_outro_profissional',
     'motivo', 'motivo_busca_ativa', 'peso', 'altura',
     'imovel_foco', 'acao_educativa', 'tratamento_focal',
-    'inspecao_armadilha', 'registro_mecanico', 'data_visita', 'turno'
+    'inspecao_armadilha', 'registro_mecanico', 'data_visita', 'turno',
+    'createdAt', 'updatedAt', 'createdBy'
   ]
 
   const clean = {}

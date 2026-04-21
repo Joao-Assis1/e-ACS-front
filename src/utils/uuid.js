@@ -1,8 +1,8 @@
 /**
- * Gera um ID temporário (UUID v4) para registros locais.
+ * Gera um ID único (UUID v4) para registros locais.
  * Permite que o backend aceite o ID como válido e o mantenha como chave primária.
  */
-export const generateTempId = () => {
+export const generateId = () => {
   // Se disponível no navegador moderno
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID()
@@ -15,6 +15,9 @@ export const generateTempId = () => {
     return v.toString(16)
   })
 }
+
+// Alias para retrocompatibilidade
+export const generateTempId = generateId
 
 /**
  * Verifica se um ID é temporário.

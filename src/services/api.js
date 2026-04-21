@@ -4,6 +4,7 @@ import router from '../router'
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:3000',
   headers: { 'Content-Type': 'application/json' },
+  timeout: 60000, // 60 segundos
 })
 
 api.interceptors.request.use(

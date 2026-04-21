@@ -1,5 +1,6 @@
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+import { vMaska } from 'maska/vue'
 
 import 'vuetify/styles'
 import { createVuetify } from 'vuetify'
@@ -64,6 +65,7 @@ const vuetify = createVuetify({
 
 const app = createApp(App)
 
+app.directive('maska', vMaska)
 app.use(createPinia())
 app.use(router)
 app.use(vuetify)
