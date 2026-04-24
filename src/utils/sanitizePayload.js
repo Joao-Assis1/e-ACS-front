@@ -285,7 +285,6 @@ export const sanitizeIndividualPayload = (payload, options = {}) => {
     clean.deficiencias = payload.deficiencias || hc.deficiencias || []
   }
 
-  console.log('[sanitizeIndividualPayload] Payload final santizado:', JSON.stringify(clean, null, 2))
   return clean
 }
 

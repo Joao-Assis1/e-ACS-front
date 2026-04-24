@@ -1,10 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import { authService } from '../services/authService'
+import { persistence } from '../utils/persistence'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(localStorage.getItem('token') || null)
-  const user = ref(JSON.parse(localStorage.getItem('user') || 'null'))
+  const token = ref(persistence.load('token') || null)
+  const user = ref(persistence.load('user') || null)
   const loading = ref(false)
   const error = ref(null)
 
@@ -17,8 +18,8 @@ export const useAuthStore = defineStore('auth', () => {
       const data = await authService.login(cpf, senha)
       token.value = data.access_token
       user.value = { id: data.id, cpf: data.cpf }
-      localStorage.setItem('token', data.access_token)
-      localStorage.setItem('user', JSON.stringify(user.value))
+      persistence.save('token', token.value)
+      persistence.save('user', user.value)
       return true
     } catch (err) {
       error.value =
@@ -32,8 +33,7 @@ export const useAuthStore = defineStore('auth', () => {
   const logout = () => {
     token.value = null
     user.value = null
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+    persistence.clearAll()
   }
 
   return { token, user, loading, error, isAuthenticated, login, logout }

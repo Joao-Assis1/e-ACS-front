@@ -108,12 +108,17 @@ const router = createRouter({
 })
 
 router.beforeEach((to) => {
-  const token = localStorage.getItem('token')
+  const token = persistence.load('token')
   if (to.meta.requiresAuth !== false && !token) {
     return { name: 'login' }
   }
   if (to.name === 'login' && token) {
     return { name: 'households' }
+  }
+})
+
+export default router
+n { name: 'households' }
   }
 })
 

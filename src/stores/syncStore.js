@@ -113,9 +113,11 @@ export const useSyncStore = defineStore('sync', () => {
       }
       
     } catch (err) {
-      console.error('[SyncStore] Erro no sync:', err)
-      if (err.response) {
-        console.error('[SyncStore] Erro Detalhado:', err.response.data)
+      if (import.meta.env.DEV) {
+        console.error('[SyncStore] Erro no sync:', err)
+        if (err.response) {
+          console.error('[SyncStore] Erro Detalhado:', err.response.data)
+        }
       }
       error.value = err.response?.data?.message || 'Erro de conexão ao sincronizar.'
     } finally {

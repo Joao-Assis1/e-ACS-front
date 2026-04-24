@@ -13,7 +13,10 @@ export const persistence = {
   save(storeName, state) {
     try {
       const key = `${STORAGE_PREFIX}${storeName}_store`
-      localStorage.setItem(key, JSON.stringify(state))
+      // Ofuscação básica para evitar texto claro direto no devtools
+      const serialized = JSON.stringify(state)
+      const protected_data = btoa(unescape(encodeURIComponent(serialized)))
+      localStorage.setItem(key, protected_data)
     } catch (err) {
       console.error(`Erro ao salvar store ${storeName} no localStorage:`, err)
     }
@@ -28,7 +31,11 @@ export const persistence = {
     try {
       const key = `${STORAGE_PREFIX}${storeName}_store`
       const data = localStorage.getItem(key)
-      return data ? JSON.parse(data) : null
+      if (!data) return null
+      
+      // Desofuscação
+      const decoded = decodeURIComponent(escape(atob(data)))
+      return JSON.parse(decoded)
     } catch (err) {
       console.error(`Erro ao carregar store ${storeName} do localStorage:`, err)
       return null

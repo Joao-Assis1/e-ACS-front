@@ -277,12 +277,16 @@ watch(internalValue, async (val) => {
     if (props.family?.id) {
       formLoading.value = true
       try {
-        console.log('[RiskAssessmentDialog] Carregando histórico para:', props.family.id)
+        if (import.meta.env.DEV) {
+          console.log('[RiskAssessmentDialog] Carregando histórico para:', props.family.id)
+        }
         const history = await familyStore.fetchRiskHistory(props.family.id)
         if (history && history.length > 0) {
           const latest = history[0]
           const details = latest.details || latest
-          console.log('[RiskAssessmentDialog] Dados recuperados:', details)
+          if (import.meta.env.DEV) {
+            console.log('[RiskAssessmentDialog] Dados recuperados:', details)
+          }
           
           Object.assign(form, {
             bedriddenCount: Number(details.bedriddenCount || 0),
