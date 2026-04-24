@@ -147,6 +147,31 @@ export const useIndividualStore = defineStore('individual', () => {
     }
   }
 
+  const pruneOrphanedIndividuals = async () => {
+    loading.value = true
+    try {
+      // Nota: individualService.getAll() deve existir no backend ou ser implementado
+      const allApi = await individualService.getAll().catch(() => [])
+      if (allApi.length === 0) return
+
+      const apiIds = new Set(allApi.map(i => i.id))
+      
+      const before = individuals.value.length
+      individuals.value = individuals.value.filter(i => {
+        if (i.syncStatus !== 'SYNCED') return true
+        return apiIds.has(i.id)
+      })
+      
+      if (individuals.value.length < before) {
+        await saveToLocal()
+      }
+    } catch (err) {
+      console.error('Falha ao podar indivíduos órfãos', err)
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     individuals,
     currentIndividual,
@@ -157,6 +182,7 @@ export const useIndividualStore = defineStore('individual', () => {
     createIndividual,
     updateIndividual,
     removeIndividual,
+    pruneOrphanedIndividuals,
     saveToLocal,
     loadFromLocal
   }
