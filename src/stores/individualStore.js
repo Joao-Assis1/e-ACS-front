@@ -172,12 +172,41 @@ export const useIndividualStore = defineStore('individual', () => {
     }
   }
 
+  const fetchByHousehold = async (householdId) => {
+    loading.value = true
+    error.value = null
+    try {
+      const rawIndividuals = await individualService.getAllByHousehold(householdId)
+      const apiIndividuals = rawIndividuals.map(i => processIndividualFromApi(i))
+
+      // Filtra indivíduos locais que pertencem a este domicílio e não estão na API
+      const filteredOld = individuals.value.filter(i => {
+        if (!areIdsEqual(i.householdId || i.household_id, householdId)) return true
+        if (i.syncStatus === 'SYNCED') return false
+        return !apiIndividuals.find(ai => ai.id === i.id)
+      })
+
+      individuals.value = [
+        ...filteredOld,
+        ...apiIndividuals.map(i => ({ ...i, syncStatus: 'SYNCED' }))
+      ]
+      await saveToLocal()
+      return individuals.value.filter(i => areIdsEqual(i.householdId || i.household_id, householdId))
+    } catch (err) {
+      console.warn('Falha ao buscar indivíduos por domicílio da API.', err)
+      return individuals.value.filter(i => areIdsEqual(i.householdId || i.household_id, householdId))
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     individuals,
     currentIndividual,
     loading,
     error,
     fetchByFamily,
+    fetchByHousehold,
     fetchById,
     createIndividual,
     updateIndividual,

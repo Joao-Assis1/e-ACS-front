@@ -81,7 +81,7 @@ export const useFamilyStore = defineStore('family', () => {
       const beforeCount = families.value.length
       families.value = families.value.filter(f => {
         if (f.syncStatus !== 'SYNCED') return true
-        return apiIds.has(h.id)
+        return apiIds.has(f.id)
       })
       
       if (families.value.length < beforeCount) {
