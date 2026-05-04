@@ -13,6 +13,22 @@
 
       <v-card-text class="pa-0">
         <v-form ref="formRef" class="pa-5">
+          <!-- Aviso de Automação do Sistema -->
+          <v-alert
+            color="info"
+            variant="tonal"
+            class="mb-6 rounded-lg"
+            density="comfortable"
+            icon="mdi-robot-confused-outline"
+            border="start"
+          >
+            <div class="text-subtitle-2 font-weight-bold">Automação e-tet</div>
+            <div class="text-caption">
+              Este sistema realiza o <strong>cálculo automático</strong> da estratificação de risco (Coelho-Savassi) para o <strong>e-PET</strong>. 
+              As sentinelas preenchidas abaixo são processadas instantaneamente para definir a prioridade de atendimento da família.
+            </div>
+          </v-alert>
+
           <div class="text-caption text-uppercase font-weight-bold text-medium-emphasis mb-4">
             Sentinelas para Família de {{ familyName }}
           </div>
